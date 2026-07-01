@@ -23,6 +23,17 @@ export interface PastHistory {
   others: string;
 }
 
+export interface Drug {
+  id: string;
+  name: string;
+  schedule: string;
+  scheduleBn: string;
+  duration: string;
+  durationBn: string;
+  route: string;
+  notes: string;
+}
+
 export interface Prescription {
   id: string;
   patientId: string;
@@ -43,6 +54,8 @@ export interface Prescription {
   gatRight: string;
   gatLeft: string;
 
+  drugs: Drug[];
+
   rightEyeDistance: EyeSpectacleRx;
   leftEyeDistance: EyeSpectacleRx;
   rightEyeNear: EyeSpectacleRx;
@@ -56,7 +69,9 @@ export interface Prescription {
   lensMaterial: string;
 
   advice: string;
+  adviceBn: string;
   followUp: string;
+  followUpBn: string;
 
   createdAt: string;
 }

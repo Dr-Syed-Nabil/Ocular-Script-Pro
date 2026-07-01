@@ -1,11 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Alert,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,10 +13,23 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SearchBar } from "@/components/SearchBar";
+import { SmartInput } from "@/components/SmartInput";
+import { VAPicker } from "@/components/VAPicker";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
-import { EyeSpectacleRx, EyeVA, PastHistory, Patient } from "@/types";
+import { useSuggestions } from "@/hooks/useSuggestions";
+import {
+  isAlreadyBangla,
+  tobnDigits,
+  translateToBangla,
+} from "@/utils/banglaTranslate";
+import {
+  Drug,
+  EyeSpectacleRx,
+  EyeVA,
+  PastHistory,
+  Patient,
+} from "@/types";
 
 const EMPTY_VA: EyeVA = { ua: "", wa: "", ph: "", bcva: "" };
 const EMPTY_RX: EyeSpectacleRx = { dsp: "", dcyl: "", axis: "", va: "" };
@@ -25,6 +37,16 @@ const EMPTY_HISTORY: PastHistory = {
   dm: false, htn: false, ihd: false, ckd: false,
   ba: false, thyDs: false, uromax: false, others: "",
 };
+const DRUG_ROUTES = ["Eye Drops", "Eye Ointment", "Oral", "Injection", "Topical"];
+
+function genDrugId() {
+  return Math.random().toString(36).slice(2);
+}
+function emptyDrug(): Drug {
+  return { id: genDrugId(), name: "", schedule: "", scheduleBn: "", duration: "", durationBn: "", route: "Eye Drops", notes: "" };
+}
+
+/* ───────── tiny helpers ───────── */
 
 function SectionTitle({ title }: { title: string }) {
   const colors = useColors();
@@ -38,342 +60,39 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
-function CheckItem({
-  label, value, onChange,
-}: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function MiniLabel({ label }: { label: string }) {
+  const colors = useColors();
+  return (
+    <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 }}>
+      {label}
+    </Text>
+  );
+}
+
+function CheckItem({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   const colors = useColors();
   return (
     <TouchableOpacity
-      style={{
-        flexDirection: "row", alignItems: "center",
-        paddingHorizontal: 10, paddingVertical: 7,
-        borderRadius: 8, borderWidth: 1.5,
-        borderColor: value ? colors.primary : colors.border,
-        backgroundColor: value ? colors.secondary : colors.card,
-      }}
-      onPress={() => onChange(!value)}
-      activeOpacity={0.7}
+      style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 1.5, borderColor: value ? colors.primary : colors.border, backgroundColor: value ? colors.secondary : colors.card }}
+      onPress={() => onChange(!value)} activeOpacity={0.7}
     >
-      <View style={{
-        width: 16, height: 16, borderRadius: 4, borderWidth: 1.5,
-        borderColor: value ? colors.primary : colors.mutedForeground,
-        backgroundColor: value ? colors.primary : "transparent",
-        alignItems: "center", justifyContent: "center", marginRight: 6,
-      }}>
+      <View style={{ width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, borderColor: value ? colors.primary : colors.mutedForeground, backgroundColor: value ? colors.primary : "transparent", alignItems: "center", justifyContent: "center", marginRight: 6 }}>
         {value && <Feather name="check" size={10} color="#fff" />}
       </View>
-      <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: value ? colors.primary : colors.foreground }}>
-        {label}
-      </Text>
+      <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: value ? colors.primary : colors.foreground }}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-function VATable({
-  reVA, leVA, onChange,
-}: { reVA: EyeVA; leVA: EyeVA; onChange: (eye: "re" | "le", f: keyof EyeVA, v: string) => void }) {
-  const colors = useColors();
-  const s = vaStyles(colors);
-  const fields: { key: keyof EyeVA; label: string }[] = [
-    { key: "ua", label: "UA" },
-    { key: "wa", label: "WA" },
-    { key: "ph", label: "PH" },
-    { key: "bcva", label: "BCVA" },
-  ];
-  return (
-    <View style={s.table}>
-      <View style={s.headerRow}>
-        <View style={s.labelCol} />
-        <Text style={[s.headerCell, { flex: 1 }]}>RE (OD)</Text>
-        <Text style={[s.headerCell, { flex: 1 }]}>LE (OS)</Text>
-      </View>
-      {fields.map(({ key, label }) => (
-        <View key={key} style={s.row}>
-          <Text style={s.rowLabel}>{label}</Text>
-          <TextInput
-            style={s.cell}
-            value={reVA[key]}
-            onChangeText={(v) => onChange("re", key, v)}
-            placeholder="6/6"
-            placeholderTextColor={colors.mutedForeground}
-            autoCorrect={false}
-          />
-          <TextInput
-            style={s.cell}
-            value={leVA[key]}
-            onChangeText={(v) => onChange("le", key, v)}
-            placeholder="6/6"
-            placeholderTextColor={colors.mutedForeground}
-            autoCorrect={false}
-          />
-        </View>
-      ))}
-    </View>
-  );
-}
-
-const vaStyles = (colors: ReturnType<typeof useColors>) =>
-  StyleSheet.create({
-    table: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      overflow: "hidden",
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    headerRow: {
-      flexDirection: "row",
-      backgroundColor: colors.secondary,
-      paddingVertical: 8,
-      paddingHorizontal: 10,
-    },
-    labelCol: { width: 48 },
-    headerCell: {
-      fontSize: 12,
-      fontFamily: "Inter_700Bold",
-      color: colors.primary,
-      textAlign: "center",
-    },
-    row: {
-      flexDirection: "row",
-      alignItems: "center",
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      paddingHorizontal: 10,
-    },
-    rowLabel: {
-      width: 48,
-      fontSize: 11,
-      fontFamily: "Inter_700Bold",
-      color: colors.mutedForeground,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    cell: {
-      flex: 1,
-      fontSize: 14,
-      fontFamily: "Inter_500Medium",
-      color: colors.foreground,
-      textAlign: "center",
-      paddingVertical: 9,
-      paddingHorizontal: 4,
-    },
-  });
-
-function SpectacleTable({
-  reD, leD, reN, leN,
-  ipd,
-  onChangeRxD, onChangeRxN,
-  onChangeIPD,
-}: {
-  reD: EyeSpectacleRx; leD: EyeSpectacleRx;
-  reN: EyeSpectacleRx; leN: EyeSpectacleRx;
-  ipd: string;
-  onChangeRxD: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
-  onChangeRxN: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
-  onChangeIPD: (v: string) => void;
-}) {
-  const colors = useColors();
-  const s = rxStyles(colors);
-
-  const cols: { key: keyof EyeSpectacleRx; label: string }[] = [
-    { key: "dsp", label: "SPH" },
-    { key: "dcyl", label: "CYL" },
-    { key: "axis", label: "AXIS" },
-    { key: "va", label: "VA" },
-  ];
-
-  const RxRow = ({
-    rowLabel,
-    rx, onChangeFn,
-  }: {
-    rowLabel: string;
-    rx: { re: EyeSpectacleRx; le: EyeSpectacleRx };
-    onChangeFn: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
-  }) => (
-    <>
-      <View style={s.distRowHeader}>
-        <Text style={s.distRowLabel}>{rowLabel}</Text>
-      </View>
-      <View style={s.rxRow}>
-        <Text style={s.eyeTag}>RE</Text>
-        {cols.map(({ key, label }) => (
-          <View key={key} style={s.rxCell}>
-            <Text style={s.colLabel}>{label}</Text>
-            <TextInput
-              style={s.rxInput}
-              value={rx.re[key]}
-              onChangeText={(v) => onChangeFn("re", key, v)}
-              placeholder={key === "axis" ? "°" : key === "va" ? "6/6" : "0.00"}
-              placeholderTextColor={colors.mutedForeground}
-              keyboardType={key === "va" ? "default" : "numbers-and-punctuation"}
-              autoCorrect={false}
-            />
-          </View>
-        ))}
-      </View>
-      <View style={[s.rxRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
-        <Text style={s.eyeTag}>LE</Text>
-        {cols.map(({ key }) => (
-          <View key={key} style={s.rxCell}>
-            <TextInput
-              style={s.rxInput}
-              value={rx.le[key]}
-              onChangeText={(v) => onChangeFn("le", key, v)}
-              placeholder={key === "axis" ? "°" : key === "va" ? "6/6" : "0.00"}
-              placeholderTextColor={colors.mutedForeground}
-              keyboardType={key === "va" ? "default" : "numbers-and-punctuation"}
-              autoCorrect={false}
-            />
-          </View>
-        ))}
-      </View>
-    </>
-  );
-
-  return (
-    <View style={s.table}>
-      <RxRow
-        rowLabel="Distance (D)"
-        rx={{ re: reD, le: leD }}
-        onChangeFn={onChangeRxD}
-      />
-      <View style={[s.divider, { borderTopWidth: 2, borderTopColor: colors.border }]} />
-      <RxRow
-        rowLabel="Near (N)"
-        rx={{ re: reN, le: leN }}
-        onChangeFn={onChangeRxN}
-      />
-      <View style={[s.divider, { borderTopWidth: 2, borderTopColor: colors.border }]} />
-      <View style={s.ipdRow}>
-        <Text style={s.ipdLabel}>IPD (mm)</Text>
-        <TextInput
-          style={s.ipdInput}
-          value={ipd}
-          onChangeText={onChangeIPD}
-          placeholder="64"
-          keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
-      </View>
-    </View>
-  );
-}
-
-const rxStyles = (colors: ReturnType<typeof useColors>) =>
-  StyleSheet.create({
-    table: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      overflow: "hidden",
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    distRowHeader: {
-      backgroundColor: colors.secondary,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-    },
-    distRowLabel: {
-      fontSize: 12,
-      fontFamily: "Inter_700Bold",
-      color: colors.primary,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    rxRow: {
-      flexDirection: "row",
-      alignItems: "flex-end",
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-    },
-    eyeTag: {
-      width: 28,
-      fontSize: 11,
-      fontFamily: "Inter_700Bold",
-      color: colors.mutedForeground,
-      paddingBottom: 8,
-    },
-    rxCell: {
-      flex: 1,
-      alignItems: "center",
-      paddingHorizontal: 2,
-    },
-    colLabel: {
-      fontSize: 9,
-      fontFamily: "Inter_600SemiBold",
-      color: colors.mutedForeground,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 3,
-    },
-    rxInput: {
-      width: "100%",
-      borderWidth: 1.5,
-      borderColor: colors.border,
-      borderRadius: 6,
-      paddingVertical: 7,
-      paddingHorizontal: 2,
-      fontSize: 13,
-      fontFamily: "Inter_500Medium",
-      color: colors.foreground,
-      textAlign: "center",
-      backgroundColor: colors.surface,
-    },
-    divider: {},
-    ipdRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    ipdLabel: {
-      fontSize: 13,
-      fontFamily: "Inter_600SemiBold",
-      color: colors.foreground,
-    },
-    ipdInput: {
-      width: 80,
-      borderWidth: 1.5,
-      borderColor: colors.border,
-      borderRadius: 8,
-      paddingVertical: 7,
-      paddingHorizontal: 10,
-      fontSize: 14,
-      fontFamily: "Inter_600SemiBold",
-      color: colors.foreground,
-      textAlign: "center",
-      backgroundColor: colors.surface,
-    },
-  });
-
-function ToggleGroup({
-  options, value, onChange, multi,
-}: {
-  options: string[];
-  value: string | string[];
-  onChange: (v: string | string[]) => void;
-  multi?: boolean;
-}) {
+function ToggleGroup({ options, value, onChange, multi }: { options: string[]; value: string | string[]; onChange: (v: string | string[]) => void; multi?: boolean }) {
   const colors = useColors();
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {options.map((opt) => {
-        const active = multi
-          ? (value as string[]).includes(opt)
-          : value === opt;
+        const active = multi ? (value as string[]).includes(opt) : value === opt;
         return (
-          <TouchableOpacity
-            key={opt}
-            style={{
-              borderWidth: 1.5,
-              borderColor: active ? colors.primary : colors.border,
-              borderRadius: 20,
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              backgroundColor: active ? colors.secondary : colors.card,
-            }}
+          <TouchableOpacity key={opt}
+            style={{ borderWidth: 1.5, borderColor: active ? colors.primary : colors.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: active ? colors.secondary : colors.card }}
             onPress={() => {
               if (multi) {
                 const arr = value as string[];
@@ -383,13 +102,7 @@ function ToggleGroup({
               }
             }}
           >
-            <Text style={{
-              fontSize: 13,
-              fontFamily: active ? "Inter_600SemiBold" : "Inter_500Medium",
-              color: active ? colors.primary : colors.mutedForeground,
-            }}>
-              {opt}
-            </Text>
+            <Text style={{ fontSize: 13, fontFamily: active ? "Inter_600SemiBold" : "Inter_500Medium", color: active ? colors.primary : colors.mutedForeground }}>{opt}</Text>
           </TouchableOpacity>
         );
       })}
@@ -397,34 +110,222 @@ function ToggleGroup({
   );
 }
 
-function NoteInput({ value, onChange, placeholder, lines = 3 }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; lines?: number;
+/* ───────── VA Table ───────── */
+
+function VATable({ reVA, leVA, onChangeRe, onChangeLe }: {
+  reVA: EyeVA; leVA: EyeVA;
+  onChangeRe: (f: keyof EyeVA, v: string) => void;
+  onChangeLe: (f: keyof EyeVA, v: string) => void;
 }) {
   const colors = useColors();
+
+  const rows: { key: keyof EyeVA; label: string; ni?: boolean }[] = [
+    { key: "ua", label: "UA" },
+    { key: "wa", label: "WA" },
+    { key: "ph", label: "PH", ni: true },
+    { key: "bcva", label: "BCVA", ni: true },
+  ];
+
   return (
-    <TextInput
-      style={{
-        backgroundColor: colors.card,
-        borderRadius: 12,
-        padding: 12,
-        fontSize: 14,
-        color: colors.foreground,
-        fontFamily: "Inter_400Regular",
-        minHeight: lines * 36,
-        borderWidth: 1.5,
-        borderColor: colors.border,
-        textAlignVertical: "top",
-      }}
-      value={value}
-      onChangeText={onChange}
-      placeholder={placeholder}
-      placeholderTextColor={colors.mutedForeground}
-      multiline
-      numberOfLines={lines}
-      textAlignVertical="top"
-    />
+    <View style={{ backgroundColor: colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
+      <View style={{ flexDirection: "row", backgroundColor: colors.secondary, paddingVertical: 8, paddingHorizontal: 10 }}>
+        <View style={{ width: 52 }} />
+        <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary, textAlign: "center" }}>RE (OD)</Text>
+        <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary, textAlign: "center" }}>LE (OS)</Text>
+      </View>
+      {rows.map(({ key, label, ni }) => (
+        <View key={key} style={{ flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 10, paddingVertical: 6 }}>
+          <Text style={{ width: 44, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</Text>
+          <VAPicker
+            value={reVA[key]}
+            onChange={(v) => onChangeRe(key, v)}
+            fieldLabel={label}
+            eyeLabel="RE"
+            includeNI={ni}
+          />
+          <VAPicker
+            value={leVA[key]}
+            onChange={(v) => onChangeLe(key, v)}
+            fieldLabel={label}
+            eyeLabel="LE"
+            includeNI={ni}
+          />
+        </View>
+      ))}
+    </View>
   );
 }
+
+/* ───────── Spectacle Table ───────── */
+
+function SpectacleTable({ reD, leD, reN, leN, ipd, onChangeRxD, onChangeRxN, onChangeIPD }: {
+  reD: EyeSpectacleRx; leD: EyeSpectacleRx;
+  reN: EyeSpectacleRx; leN: EyeSpectacleRx;
+  ipd: string;
+  onChangeRxD: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
+  onChangeRxN: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
+  onChangeIPD: (v: string) => void;
+}) {
+  const colors = useColors();
+  const cols: { key: keyof EyeSpectacleRx; label: string }[] = [
+    { key: "dsp", label: "SPH" }, { key: "dcyl", label: "CYL" },
+    { key: "axis", label: "AXIS" }, { key: "va", label: "VA" },
+  ];
+
+  const RxBlock = ({ title, re, le, onFn }: { title: string; re: EyeSpectacleRx; le: EyeSpectacleRx; onFn: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void }) => (
+    <>
+      <View style={{ backgroundColor: colors.secondary, paddingVertical: 6, paddingHorizontal: 12 }}>
+        <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>{title}</Text>
+      </View>
+      {(["re", "le"] as const).map((eye) => (
+        <View key={eye} style={{ flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <Text style={{ width: 28, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground, paddingBottom: 8 }}>{eye === "re" ? "RE" : "LE"}</Text>
+          {cols.map(({ key, label }) => (
+            <View key={key} style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
+              {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>{label}</Text>}
+              <TextInput
+                style={{ width: "100%", borderWidth: 1.5, borderColor: colors.border, borderRadius: 6, paddingVertical: 7, fontSize: 13, fontFamily: "Inter_500Medium", color: colors.foreground, textAlign: "center", backgroundColor: colors.surface }}
+                value={(eye === "re" ? re : le)[key]}
+                onChangeText={(v) => onFn(eye, key, v)}
+                placeholder={key === "axis" ? "°" : key === "va" ? "6/6" : "0.00"}
+                placeholderTextColor={colors.mutedForeground}
+                keyboardType={key === "va" ? "default" : "numbers-and-punctuation"}
+                autoCorrect={false}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
+    </>
+  );
+
+  return (
+    <View style={{ backgroundColor: colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
+      <RxBlock title="Distance (D)" re={reD} le={leD} onFn={onChangeRxD} />
+      <View style={{ height: 2, backgroundColor: colors.border }} />
+      <RxBlock title="Near (N)" re={reN} le={leN} onFn={onChangeRxN} />
+      <View style={{ borderTopWidth: 2, borderTopColor: colors.border, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 }}>
+        <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>IPD (mm)</Text>
+        <TextInput
+          style={{ width: 80, borderWidth: 1.5, borderColor: colors.border, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 10, fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, textAlign: "center", backgroundColor: colors.surface }}
+          value={ipd} onChangeText={onChangeIPD}
+          placeholder="64" keyboardType="decimal-pad"
+          placeholderTextColor={colors.mutedForeground}
+        />
+      </View>
+    </View>
+  );
+}
+
+/* ───────── Drug Row ───────── */
+
+function DrugRow({ drug, onChange, onDelete, drugSuggestions }: {
+  drug: Drug;
+  onChange: (updated: Drug) => void;
+  onDelete: () => void;
+  drugSuggestions: ReturnType<typeof useSuggestions>;
+}) {
+  const colors = useColors();
+  const scheduleSugg = useSuggestions("drug_schedule");
+  const durationSugg = useSuggestions("drug_duration");
+
+  const upd = (field: keyof Drug) => (val: string) => onChange({ ...drug, [field]: val });
+
+  const translateSchedule = () => {
+    const bn = tobnDigits(drug.schedule);
+    onChange({ ...drug, scheduleBn: bn });
+  };
+
+  const translateDuration = () => {
+    const bn = translateToBangla(drug.duration);
+    onChange({ ...drug, durationBn: bn });
+  };
+
+  return (
+    <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>Drug</Text>
+        <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Feather name="trash-2" size={16} color={colors.destructive} />
+        </TouchableOpacity>
+      </View>
+
+      <SmartInput
+        fieldKey="drug_name"
+        value={drug.name}
+        onChangeText={upd("name")}
+        placeholder="Drug name (e.g. Moxifloxacin)"
+        style={{ fontSize: 14 }}
+      />
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+        {DRUG_ROUTES.map((r) => (
+          <TouchableOpacity key={r}
+            style={{ borderWidth: 1.5, borderColor: drug.route === r ? colors.primary : colors.border, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: drug.route === r ? colors.secondary : colors.card }}
+            onPress={() => onChange({ ...drug, route: r })}
+          >
+            <Text style={{ fontSize: 12, fontFamily: drug.route === r ? "Inter_600SemiBold" : "Inter_500Medium", color: drug.route === r ? colors.primary : colors.mutedForeground }}>{r}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+        <View style={{ flex: 1 }}>
+          <MiniLabel label="Schedule" />
+          <View style={{ flexDirection: "row", gap: 6 }}>
+            <View style={{ flex: 1 }}>
+              <SmartInput fieldKey="drug_schedule" value={drug.schedule} onChangeText={upd("schedule")} placeholder="e.g. 1+0+1 BD" />
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, alignItems: "center", justifyContent: "center" }}
+              onPress={translateSchedule}
+            >
+              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>বাংলা</Text>
+            </TouchableOpacity>
+          </View>
+          {drug.scheduleBn ? (
+            <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: colors.accent }}>{drug.scheduleBn}</Text>
+              <TouchableOpacity onPress={() => onChange({ ...drug, scheduleBn: "" })}>
+                <Feather name="x" size={12} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <MiniLabel label="Duration" />
+          <View style={{ flexDirection: "row", gap: 6 }}>
+            <View style={{ flex: 1 }}>
+              <SmartInput fieldKey="drug_duration" value={drug.duration} onChangeText={upd("duration")} placeholder="e.g. 7 days" />
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, alignItems: "center", justifyContent: "center" }}
+              onPress={translateDuration}
+            >
+              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>বাংলা</Text>
+            </TouchableOpacity>
+          </View>
+          {drug.durationBn ? (
+            <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: colors.accent }}>{drug.durationBn}</Text>
+              <TouchableOpacity onPress={() => onChange({ ...drug, durationBn: "" })}>
+                <Feather name="x" size={12} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={{ marginTop: 8 }}>
+        <MiniLabel label="Notes (optional)" />
+        <SmartInput fieldKey="drug_notes" value={drug.notes} onChangeText={upd("notes")} placeholder="Special instructions…" />
+      </View>
+    </View>
+  );
+}
+
+/* ───────── Main screen ───────── */
 
 export default function NewRxScreen() {
   const colors = useColors();
@@ -432,14 +333,19 @@ export default function NewRxScreen() {
   const { patients, addPrescription, addPatient } = useData();
   const s = styles(colors);
 
+  const ccSugg = useSuggestions("chief_complaints");
+  const adnexaSugg = useSuggestions("adnexa");
+  const anteriorSugg = useSuggestions("anterior_segment");
+  const posteriorSugg = useSuggestions("posterior_segment");
+  const adviceSugg = useSuggestions("advice");
+  const drugNameSugg = useSuggestions("drug_name");
+
   const [patientQuery, setPatientQuery] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
-  const [newPatientAge, setNewPatientAge] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
-
   const [patientAge, setPatientAge] = useState("");
 
   const [reVA, setReVA] = useState<EyeVA>(EMPTY_VA);
@@ -455,6 +361,8 @@ export default function NewRxScreen() {
   const [gatRight, setGatRight] = useState("");
   const [gatLeft, setGatLeft] = useState("");
 
+  const [drugs, setDrugs] = useState<Drug[]>([emptyDrug()]);
+
   const [reD, setReD] = useState<EyeSpectacleRx>(EMPTY_RX);
   const [leD, setLeD] = useState<EyeSpectacleRx>(EMPTY_RX);
   const [reN, setReN] = useState<EyeSpectacleRx>(EMPTY_RX);
@@ -467,7 +375,9 @@ export default function NewRxScreen() {
   const [lensMaterial, setLensMaterial] = useState("");
 
   const [advice, setAdvice] = useState("");
+  const [adviceBn, setAdviceBn] = useState("");
   const [followUp, setFollowUp] = useState("");
+  const [followUpBn, setFollowUpBn] = useState("");
 
   const [saving, setSaving] = useState(false);
 
@@ -477,20 +387,11 @@ export default function NewRxScreen() {
     return patients.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
   }, [patients, patientQuery]);
 
-  const handleVAChange = (eye: "re" | "le", field: keyof EyeVA, val: string) => {
-    if (eye === "re") setReVA((p) => ({ ...p, [field]: val }));
-    else setLeVA((p) => ({ ...p, [field]: val }));
-  };
-
-  const handleRxDChange = (eye: "re" | "le", field: keyof EyeSpectacleRx, val: string) => {
-    if (eye === "re") setReD((p) => ({ ...p, [field]: val }));
-    else setLeD((p) => ({ ...p, [field]: val }));
-  };
-
-  const handleRxNChange = (eye: "re" | "le", field: keyof EyeSpectacleRx, val: string) => {
-    if (eye === "re") setReN((p) => ({ ...p, [field]: val }));
-    else setLeN((p) => ({ ...p, [field]: val }));
-  };
+  const updateDrug = (id: string, updated: Drug) =>
+    setDrugs((ds) => ds.map((d) => (d.id === id ? updated : d)));
+  const removeDrug = (id: string) =>
+    setDrugs((ds) => ds.filter((d) => d.id !== id));
+  const addDrug = () => setDrugs((ds) => [...ds, emptyDrug()]);
 
   const handleSave = async () => {
     if (!selectedPatient && !isNewPatient) {
@@ -505,41 +406,30 @@ export default function NewRxScreen() {
     try {
       let patient = selectedPatient;
       if (isNewPatient) {
-        patient = await addPatient({
-          name: newPatientName.trim(),
-          dob: "",
-          phone: newPatientPhone.trim(),
-          email: "",
-          gender: "",
-        });
+        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: newPatientPhone.trim(), email: "", gender: "" });
       }
       if (!patient) return;
 
+      // Auto-save suggestions
+      if (chiefComplaints.trim()) ccSugg.add(chiefComplaints);
+      if (adnexa.trim()) adnexaSugg.add(adnexa);
+      if (anteriorSegment.trim()) anteriorSugg.add(anteriorSegment);
+      if (posteriorSegment.trim()) posteriorSugg.add(posteriorSegment);
+      if (advice.trim()) adviceSugg.add(advice);
+      drugs.forEach((d) => { if (d.name) drugNameSugg.add(d.name); });
+
       await addPrescription({
-        patientId: patient.id,
-        patientName: patient.name,
-        patientAge: patientAge.trim(),
+        patientId: patient.id, patientName: patient.name, patientAge,
         date: new Date().toISOString().split("T")[0],
-        rightEyeVA: reVA,
-        leftEyeVA: leVA,
-        chiefComplaints,
-        pastHistory: history,
-        adnexa,
-        anteriorSegment,
-        posteriorSegment,
-        gatRight,
-        gatLeft,
-        rightEyeDistance: reD,
-        leftEyeDistance: leD,
-        rightEyeNear: reN,
-        leftEyeNear: leN,
-        ipd,
-        lensUsage,
-        lensType,
-        lensCoating,
-        lensMaterial,
-        advice,
-        followUp,
+        rightEyeVA: reVA, leftEyeVA: leVA,
+        chiefComplaints, pastHistory: history,
+        adnexa, anteriorSegment, posteriorSegment,
+        gatRight, gatLeft,
+        drugs: drugs.filter((d) => d.name.trim()),
+        rightEyeDistance: reD, leftEyeDistance: leD,
+        rightEyeNear: reN, leftEyeNear: leN, ipd,
+        lensUsage, lensType, lensCoating, lensMaterial,
+        advice, adviceBn, followUp, followUpBn,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -559,20 +449,13 @@ export default function NewRxScreen() {
           <Feather name="x" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={s.navTitle}>New Prescription</Text>
-        <TouchableOpacity
-          style={[s.saveBtn, saving && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-        >
+        <TouchableOpacity style={[s.saveBtn, saving && s.saveBtnDisabled]} onPress={handleSave} disabled={saving}>
           <Text style={s.saveBtnText}>{saving ? "Saving…" : "Save Rx"}</Text>
         </TouchableOpacity>
       </View>
 
       <KeyboardAwareScrollView
-        contentContainerStyle={[
-          s.scroll,
-          { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 },
-        ]}
+        contentContainerStyle={[s.scroll, { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 }]}
         showsVerticalScrollIndicator={false}
         bottomOffset={20}
         keyboardShouldPersistTaps="handled"
@@ -583,13 +466,10 @@ export default function NewRxScreen() {
           <View>
             <View style={s.searchRow}>
               <Feather name="user" size={15} color={colors.mutedForeground} style={{ marginRight: 8 }} />
-              <TextInput
-                style={s.patientInput}
-                value={patientQuery}
+              <TextInput style={s.patientInput} value={patientQuery}
                 onChangeText={(t) => { setPatientQuery(t); setSelectedPatient(null); setShowDropdown(true); }}
                 onFocus={() => setShowDropdown(true)}
-                placeholder="Search patient by name…"
-                placeholderTextColor={colors.mutedForeground}
+                placeholder="Search patient by name…" placeholderTextColor={colors.mutedForeground}
               />
               {selectedPatient && <Feather name="check-circle" size={16} color={colors.success} />}
             </View>
@@ -602,40 +482,30 @@ export default function NewRxScreen() {
                     {p.phone ? <Text style={s.dropdownSub}>{p.phone}</Text> : null}
                   </TouchableOpacity>
                 ))}
-                {filteredPatients.length === 0 && (
-                  <View style={s.dropdownItem}>
-                    <Text style={s.dropdownSub}>No patients found</Text>
-                  </View>
-                )}
+                {filteredPatients.length === 0 && <View style={s.dropdownItem}><Text style={s.dropdownSub}>No patients found</Text></View>}
               </View>
             )}
             <TouchableOpacity style={s.linkBtn} onPress={() => { setIsNewPatient(true); setShowDropdown(false); }}>
-              <Feather name="user-plus" size={13} color={colors.primary} />
-              <Text style={s.linkBtnText}>Create new patient</Text>
+              <Feather name="user-plus" size={13} color={colors.primary} /><Text style={s.linkBtnText}>Create new patient</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={s.newPatientForm}>
-            <TextInput style={s.input} value={newPatientName} onChangeText={setNewPatientName}
-              placeholder="Patient full name *" placeholderTextColor={colors.mutedForeground} />
-            <TextInput style={s.input} value={newPatientPhone} onChangeText={setNewPatientPhone}
-              placeholder="Phone number" keyboardType="phone-pad" placeholderTextColor={colors.mutedForeground} />
+          <View style={{ gap: 10 }}>
+            <TextInput style={s.input} value={newPatientName} onChangeText={setNewPatientName} placeholder="Patient full name *" placeholderTextColor={colors.mutedForeground} />
+            <TextInput style={s.input} value={newPatientPhone} onChangeText={setNewPatientPhone} placeholder="Phone number" keyboardType="phone-pad" placeholderTextColor={colors.mutedForeground} />
             <TouchableOpacity style={s.linkBtn} onPress={() => setIsNewPatient(false)}>
-              <Feather name="search" size={13} color={colors.primary} />
-              <Text style={s.linkBtnText}>Search existing patient</Text>
+              <Feather name="search" size={13} color={colors.primary} /><Text style={s.linkBtnText}>Search existing patient</Text>
             </TouchableOpacity>
           </View>
         )}
-
         <View style={s.row}>
           <View style={{ flex: 1 }}>
-            <Text style={s.miniLabel}>Age</Text>
-            <TextInput style={s.input} value={patientAge} onChangeText={setPatientAge}
-              placeholder="e.g. 45 yrs" placeholderTextColor={colors.mutedForeground} keyboardType="default" />
+            <MiniLabel label="Age" />
+            <TextInput style={s.input} value={patientAge} onChangeText={setPatientAge} placeholder="e.g. 45 yrs" placeholderTextColor={colors.mutedForeground} />
           </View>
           <View style={{ width: 12 }} />
           <View style={{ flex: 1 }}>
-            <Text style={s.miniLabel}>Date</Text>
+            <MiniLabel label="Date" />
             <View style={[s.input, { justifyContent: "center" }]}>
               <Text style={{ fontSize: 14, color: colors.foreground, fontFamily: "Inter_500Medium" }}>
                 {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
@@ -646,127 +516,124 @@ export default function NewRxScreen() {
 
         {/* ─── Chief Complaints ─── */}
         <SectionTitle title="Chief Complaints" />
-        <NoteInput value={chiefComplaints} onChange={setChiefComplaints}
-          placeholder="e.g. Blurred vision, headache, eye pain…" lines={3} />
+        <SmartInput fieldKey="chief_complaints" value={chiefComplaints} onChangeText={setChiefComplaints}
+          placeholder="e.g. Blurred vision, headache, eye pain…" minHeight={80} multiline />
 
         {/* ─── Past History ─── */}
         <SectionTitle title="Past History" />
         <View style={s.checkGrid}>
-          {([
-            ["dm", "DM"], ["htn", "HTN"], ["ihd", "IHD"], ["ckd", "CKD"],
-            ["ba", "BA"], ["thyDs", "Thyroid Ds"], ["uromax", "Uromax"],
-          ] as [keyof PastHistory, string][]).map(([key, label]) => (
-            <CheckItem key={key} label={label}
-              value={history[key] as boolean}
-              onChange={(v) => setHistory((h) => ({ ...h, [key]: v }))} />
+          {([["dm","DM"],["htn","HTN"],["ihd","IHD"],["ckd","CKD"],["ba","BA"],["thyDs","Thyroid Ds"],["uromax","Uromax"]] as [keyof PastHistory, string][]).map(([key, label]) => (
+            <CheckItem key={key} label={label} value={history[key] as boolean} onChange={(v) => setHistory((h) => ({ ...h, [key]: v }))} />
           ))}
         </View>
         <View style={{ marginTop: 8 }}>
-          <Text style={s.miniLabel}>Others</Text>
-          <TextInput style={s.input} value={history.others}
+          <MiniLabel label="Others" />
+          <SmartInput fieldKey="past_history_others" value={history.others}
             onChangeText={(v) => setHistory((h) => ({ ...h, others: v }))}
-            placeholder="Other medical history…" placeholderTextColor={colors.mutedForeground} />
+            placeholder="Other medical history…" />
         </View>
 
         {/* ─── Visual Acuity ─── */}
         <SectionTitle title="Visual Acuity" />
-        <VATable reVA={reVA} leVA={leVA} onChange={handleVAChange} />
+        <VATable
+          reVA={reVA} leVA={leVA}
+          onChangeRe={(f, v) => setReVA((p) => ({ ...p, [f]: v }))}
+          onChangeLe={(f, v) => setLeVA((p) => ({ ...p, [f]: v }))}
+        />
 
         {/* ─── Examination ─── */}
         <SectionTitle title="Examination Findings" />
-        <Text style={s.miniLabel}>Adnexa</Text>
-        <NoteInput value={adnexa} onChange={setAdnexa}
-          placeholder="Eyelid, lacrimal, orbit…" lines={2} />
+        <MiniLabel label="Adnexa" />
+        <SmartInput fieldKey="adnexa" value={adnexa} onChangeText={setAdnexa} placeholder="Eyelid, lacrimal, orbit…" minHeight={64} multiline />
         <View style={{ height: 8 }} />
-        <Text style={s.miniLabel}>Anterior Segment</Text>
-        <NoteInput value={anteriorSegment} onChange={setAnteriorSegment}
-          placeholder="Cornea, AC, iris, lens…" lines={3} />
+        <MiniLabel label="Anterior Segment" />
+        <SmartInput fieldKey="anterior_segment" value={anteriorSegment} onChangeText={setAnteriorSegment} placeholder="Cornea, AC, iris, lens…" minHeight={80} multiline />
         <View style={{ height: 8 }} />
-        <Text style={s.miniLabel}>Posterior Segment</Text>
-        <NoteInput value={posteriorSegment} onChange={setPosteriorSegment}
-          placeholder="Vitreous, retina, disc, macula…" lines={3} />
+        <MiniLabel label="Posterior Segment" />
+        <SmartInput fieldKey="posterior_segment" value={posteriorSegment} onChangeText={setPosteriorSegment} placeholder="Vitreous, retina, disc, macula…" minHeight={80} multiline />
 
-        {/* ─── GAT / IOP ─── */}
+        {/* ─── GAT ─── */}
         <SectionTitle title="GAT / Intraocular Pressure" />
-        <View style={s.gatRow}>
-          <View style={s.gatField}>
-            <Text style={s.miniLabel}>RE (mmHg)</Text>
-            <TextInput style={[s.input, { textAlign: "center" }]}
-              value={gatRight} onChangeText={setGatRight}
-              placeholder="14" keyboardType="decimal-pad"
-              placeholderTextColor={colors.mutedForeground} />
+        <View style={s.row}>
+          <View style={{ flex: 1 }}>
+            <MiniLabel label="RE (mmHg)" />
+            <TextInput style={[s.input, { textAlign: "center" }]} value={gatRight} onChangeText={setGatRight} placeholder="14" keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
           </View>
           <View style={{ width: 16 }} />
-          <View style={s.gatField}>
-            <Text style={s.miniLabel}>LE (mmHg)</Text>
-            <TextInput style={[s.input, { textAlign: "center" }]}
-              value={gatLeft} onChangeText={setGatLeft}
-              placeholder="14" keyboardType="decimal-pad"
-              placeholderTextColor={colors.mutedForeground} />
+          <View style={{ flex: 1 }}>
+            <MiniLabel label="LE (mmHg)" />
+            <TextInput style={[s.input, { textAlign: "center" }]} value={gatLeft} onChangeText={setGatLeft} placeholder="14" keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
           </View>
         </View>
 
+        {/* ─── Rx / Drugs ─── */}
+        <SectionTitle title="Rx — Drugs & Medications" />
+        {drugs.map((drug) => (
+          <DrugRow key={drug.id} drug={drug} onChange={(u) => updateDrug(drug.id, u)} onDelete={() => removeDrug(drug.id)} drugSuggestions={drugNameSugg} />
+        ))}
+        <TouchableOpacity style={s.addDrugBtn} onPress={addDrug}>
+          <Feather name="plus" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.primary }}>Add Drug</Text>
+        </TouchableOpacity>
+
         {/* ─── Spectacle Correction ─── */}
         <SectionTitle title="Spectacle Correction" />
-        <SpectacleTable
-          reD={reD} leD={leD} reN={reN} leN={leN}
-          ipd={ipd}
-          onChangeRxD={handleRxDChange}
-          onChangeRxN={handleRxNChange}
+        <SpectacleTable reD={reD} leD={leD} reN={reN} leN={leN} ipd={ipd}
+          onChangeRxD={(eye, f, v) => { if (eye === "re") setReD((p) => ({ ...p, [f]: v })); else setLeD((p) => ({ ...p, [f]: v })); }}
+          onChangeRxN={(eye, f, v) => { if (eye === "re") setReN((p) => ({ ...p, [f]: v })); else setLeN((p) => ({ ...p, [f]: v })); }}
           onChangeIPD={setIpd}
         />
 
         {/* ─── Lens Options ─── */}
         <SectionTitle title="Lens Options" />
-        <Text style={s.miniLabel}>Usage</Text>
-        <ToggleGroup
-          value={lensUsage}
-          onChange={(v) => setLensUsage(v as string)}
-          options={["Constant use", "Distance only", "Near only", "Computer/intermediate"]}
-        />
+        <MiniLabel label="Usage" />
+        <ToggleGroup value={lensUsage} onChange={(v) => setLensUsage(v as string)} options={["Constant use", "Distance only", "Near only", "Computer/intermediate"]} />
         <View style={{ height: 12 }} />
-        <Text style={s.miniLabel}>Type</Text>
-        <ToggleGroup
-          value={lensType}
-          onChange={(v) => setLensType(v as string)}
-          options={["Monofocal", "Bifocal", "Progressive"]}
-        />
+        <MiniLabel label="Type" />
+        <ToggleGroup value={lensType} onChange={(v) => setLensType(v as string)} options={["Monofocal", "Bifocal", "Progressive"]} />
         <View style={{ height: 12 }} />
-        <Text style={s.miniLabel}>Coating</Text>
-        <ToggleGroup
-          value={lensCoating}
-          onChange={(v) => setLensCoating(v as string[])}
-          options={["Blue-Cut", "Photosun", "Anti-Reflective"]}
-          multi
-        />
+        <MiniLabel label="Coating" />
+        <ToggleGroup value={lensCoating} onChange={(v) => setLensCoating(v as string[])} options={["Blue-Cut", "Photosun", "Anti-Reflective"]} multi />
         <View style={{ height: 12 }} />
-        <Text style={s.miniLabel}>Material</Text>
-        <ToggleGroup
-          value={lensMaterial}
-          onChange={(v) => setLensMaterial(v as string)}
-          options={["Glass", "Plastic"]}
-        />
+        <MiniLabel label="Material" />
+        <ToggleGroup value={lensMaterial} onChange={(v) => setLensMaterial(v as string)} options={["Glass", "Plastic"]} />
 
         {/* ─── Advice ─── */}
         <SectionTitle title="Advice (উপদেশ)" />
-        <NoteInput value={advice} onChange={setAdvice}
-          placeholder="Instructions for the patient…" lines={4} />
+        <SmartInput fieldKey="advice" value={advice} onChangeText={(v) => { setAdvice(v); setAdviceBn(""); }}
+          placeholder="Instructions for the patient…" minHeight={100} multiline showTranslate />
+        {!isAlreadyBangla(advice) && advice.trim() ? (
+          <TouchableOpacity style={s.bnBtn}
+            onPress={() => setAdviceBn(translateToBangla(advice))}>
+            <Text style={s.bnBtnText}>↳ Translate to বাংলা</Text>
+          </TouchableOpacity>
+        ) : null}
+        {adviceBn ? (
+          <View style={s.bnBlock}>
+            <Text style={s.bnText}>{adviceBn}</Text>
+            <TouchableOpacity onPress={() => setAdviceBn("")} style={{ marginLeft: 8 }}>
+              <Feather name="x" size={14} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ─── Follow-up ─── */}
-        <SectionTitle title="Follow-up" />
-        <ToggleGroup
-          value={followUp}
-          onChange={(v) => setFollowUp(v as string)}
+        <SectionTitle title="Follow-up (পরবর্তী ভিজিট)" />
+        <ToggleGroup value={followUp}
+          onChange={(v) => { setFollowUp(v as string); setFollowUpBn(translateToBangla(v as string)); }}
           options={["1 week", "2 weeks", "1 month", "3 months", "6 months", "1 year", "As needed"]}
         />
         <View style={{ height: 8 }} />
-        <TextInput
-          style={s.input}
-          value={["1 week","2 weeks","1 month","3 months","6 months","1 year","As needed"].includes(followUp) ? "" : followUp}
-          onChangeText={setFollowUp}
-          placeholder="Or type custom follow-up…"
-          placeholderTextColor={colors.mutedForeground}
-        />
+        <SmartInput fieldKey="followup_custom" value={followUp} onChangeText={(v) => { setFollowUp(v); setFollowUpBn(translateToBangla(v)); }}
+          placeholder="Or type custom follow-up…" showTranslate />
+        {followUpBn && followUpBn !== followUp ? (
+          <View style={[s.bnBlock, { marginTop: 6 }]}>
+            <Text style={s.bnText}>{followUpBn}</Text>
+            <TouchableOpacity onPress={() => setFollowUpBn("")} style={{ marginLeft: 8 }}>
+              <Feather name="x" size={14} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </KeyboardAwareScrollView>
     </View>
   );
@@ -775,59 +642,27 @@ export default function NewRxScreen() {
 const styles = (colors: ReturnType<typeof useColors>) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    navBar: {
-      flexDirection: "row", alignItems: "center",
-      paddingHorizontal: 16, paddingBottom: 12, paddingTop: 4,
-    },
-    iconBtn: {
-      width: 36, height: 36, borderRadius: 18,
-      backgroundColor: colors.muted, alignItems: "center", justifyContent: "center",
-    },
-    navTitle: {
-      flex: 1, textAlign: "center", fontSize: 17,
-      fontFamily: "Inter_700Bold", color: colors.foreground,
-    },
-    saveBtn: {
-      backgroundColor: colors.primary, borderRadius: 20,
-      paddingHorizontal: 16, paddingVertical: 8,
-    },
+    navBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 12, paddingTop: 4 },
+    iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.muted, alignItems: "center", justifyContent: "center" },
+    navTitle: { flex: 1, textAlign: "center", fontSize: 17, fontFamily: "Inter_700Bold", color: colors.foreground },
+    saveBtn: { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
     saveBtnDisabled: { opacity: 0.5 },
     saveBtnText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 },
     scroll: { paddingHorizontal: 16 },
-    searchRow: {
-      flexDirection: "row", alignItems: "center",
-      backgroundColor: colors.card, borderRadius: 12,
-      paddingHorizontal: 12, paddingVertical: 11,
-      borderWidth: 1.5, borderColor: colors.border,
-    },
-    patientInput: {
-      flex: 1, fontSize: 14, color: colors.foreground, fontFamily: "Inter_400Regular",
-    },
-    dropdown: {
-      backgroundColor: colors.card, borderRadius: 12,
-      marginTop: 4, borderWidth: 1, borderColor: colors.border, overflow: "hidden",
-    },
-    dropdownItem: {
-      paddingHorizontal: 14, paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: colors.border,
-    },
+    searchRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, borderWidth: 1.5, borderColor: colors.border },
+    patientInput: { flex: 1, fontSize: 14, color: colors.foreground, fontFamily: "Inter_400Regular" },
+    dropdown: { backgroundColor: colors.card, borderRadius: 12, marginTop: 4, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+    dropdownItem: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
     dropdownName: { fontSize: 14, color: colors.foreground, fontFamily: "Inter_500Medium" },
     dropdownSub: { fontSize: 12, color: colors.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 1 },
     linkBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingVertical: 4 },
     linkBtnText: { fontSize: 13, color: colors.primary, fontFamily: "Inter_500Medium" },
-    newPatientForm: { gap: 10 },
     row: { flexDirection: "row", marginTop: 10 },
-    miniLabel: {
-      fontSize: 10, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground,
-      textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5,
-    },
-    input: {
-      backgroundColor: colors.card, borderRadius: 10,
-      paddingHorizontal: 12, paddingVertical: 11,
-      fontSize: 14, color: colors.foreground, fontFamily: "Inter_400Regular",
-      borderWidth: 1.5, borderColor: colors.border,
-    },
+    input: { backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, color: colors.foreground, fontFamily: "Inter_400Regular", borderWidth: 1.5, borderColor: colors.border },
     checkGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    gatRow: { flexDirection: "row" },
-    gatField: { flex: 1 },
+    addDrugBtn: { flexDirection: "row", alignItems: "center", backgroundColor: colors.secondary, borderRadius: 10, padding: 12, borderWidth: 1.5, borderColor: colors.primary + "40", justifyContent: "center" },
+    bnBtn: { marginTop: 6, paddingVertical: 4 },
+    bnBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.accent },
+    bnBlock: { flexDirection: "row", alignItems: "flex-start", backgroundColor: colors.secondary, borderRadius: 8, padding: 10, borderLeftWidth: 3, borderLeftColor: colors.accent },
+    bnText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 22 },
   });

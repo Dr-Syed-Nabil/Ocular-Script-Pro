@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
-import { EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
+import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
@@ -311,6 +311,41 @@ export default function PrescriptionDetailScreen() {
           </SectionBlock>
         )}
 
+        {/* Drugs */}
+        {rx.drugs && rx.drugs.length > 0 && (
+          <SectionBlock title="Rx — Drugs & Medications">
+            <View style={{ gap: 10 }}>
+              {rx.drugs.map((drug: Drug, i: number) => (
+                <InfoCard key={drug.id ?? i}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>{drug.name}</Text>
+                    <View style={{ backgroundColor: colors.secondary, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.primary }}>{drug.route}</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 16 }}>
+                    {drug.schedule ? (
+                      <View>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>Schedule</Text>
+                        <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginTop: 1 }}>{drug.schedule}</Text>
+                        {drug.scheduleBn ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 1 }}>{drug.scheduleBn}</Text> : null}
+                      </View>
+                    ) : null}
+                    {drug.duration ? (
+                      <View>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>Duration</Text>
+                        <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginTop: 1 }}>{drug.duration}</Text>
+                        {drug.durationBn ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 1 }}>{drug.durationBn}</Text> : null}
+                      </View>
+                    ) : null}
+                  </View>
+                  {drug.notes ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 6, fontStyle: "italic" }}>{drug.notes}</Text> : null}
+                </InfoCard>
+              ))}
+            </View>
+          </SectionBlock>
+        )}
+
         {/* Spectacle Rx */}
         <RxTable reD={rx.rightEyeDistance} leD={rx.leftEyeDistance} reN={rx.rightEyeNear} leN={rx.leftEyeNear} ipd={rx.ipd} />
 
@@ -330,17 +365,32 @@ export default function PrescriptionDetailScreen() {
         {/* Advice */}
         {rx.advice ? (
           <SectionBlock title="Advice (উপদেশ)">
-            <InfoCard><Text style={s.bodyText}>{rx.advice}</Text></InfoCard>
+            <InfoCard>
+              <Text style={s.bodyText}>{rx.advice}</Text>
+              {rx.adviceBn ? (
+                <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                  <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>বাংলা</Text>
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 24 }}>{rx.adviceBn}</Text>
+                </View>
+              ) : null}
+            </InfoCard>
           </SectionBlock>
         ) : null}
 
         {/* Follow-up */}
         {rx.followUp ? (
-          <SectionBlock title="Follow-up">
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Feather name="calendar" size={16} color={colors.primary} />
-              <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>{rx.followUp}</Text>
-            </View>
+          <SectionBlock title="Follow-up (পরবর্তী ভিজিট)">
+            <InfoCard>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Feather name="calendar" size={16} color={colors.primary} />
+                <View>
+                  <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>{rx.followUp}</Text>
+                  {rx.followUpBn && rx.followUpBn !== rx.followUp ? (
+                    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 2 }}>{rx.followUpBn}</Text>
+                  ) : null}
+                </View>
+              </View>
+            </InfoCard>
           </SectionBlock>
         ) : null}
 
