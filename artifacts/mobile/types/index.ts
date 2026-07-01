@@ -62,6 +62,8 @@ export interface Prescription {
   leftEyeNear: EyeSpectacleRx;
 
   ipd: string;
+  nearIPD: string;
+  addValue: string;
 
   lensUsage: string;
   lensType: string;
