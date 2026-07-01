@@ -33,12 +33,20 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue | null>(null);
 
 const DEFAULT_DOCTOR: DoctorProfile = {
-  name: "",
-  qualification: "",
-  regNumber: "",
-  clinic: "",
+  nameBn: "",
+  nameEn: "",
+  qualificationBn: "",
+  qualificationEn: "",
+  designationBn: "",
+  designationEn: "",
   phone: "",
-  address: "",
+  email: "",
+  institutionBn: "",
+  institutionEn: "",
+  regNumber: "",
+  chamberName: "",
+  chamberAddress: "",
+  chamberPhone: "",
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {

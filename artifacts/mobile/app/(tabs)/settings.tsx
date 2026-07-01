@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,31 +13,60 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 
+function FieldGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  const colors = useColors();
+  return (
+    <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
+      <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary, marginBottom: 14 }}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, multiline, keyboard }: {
+  label: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; multiline?: boolean; keyboard?: "default" | "phone-pad" | "email-address";
+}) {
+  const colors = useColors();
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 }}>{label}</Text>
+      <TextInput
+        style={{
+          borderWidth: 1.5, borderColor: colors.border, borderRadius: 10,
+          paddingHorizontal: 12, paddingVertical: 10,
+          fontSize: 14, color: colors.foreground, fontFamily: "Inter_400Regular",
+          backgroundColor: colors.surface,
+          ...(multiline ? { minHeight: 72, textAlignVertical: "top" } : {}),
+        }}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={colors.mutedForeground}
+        multiline={multiline}
+        keyboardType={keyboard ?? "default"}
+        autoCorrect={false}
+      />
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { doctor, updateDoctor } = useData();
   const s = styles(colors);
 
-  const [name, setName] = useState(doctor.name);
-  const [qualification, setQualification] = useState(doctor.qualification);
-  const [regNumber, setRegNumber] = useState(doctor.regNumber);
-  const [clinic, setClinic] = useState(doctor.clinic);
-  const [phone, setPhone] = useState(doctor.phone);
-  const [address, setAddress] = useState(doctor.address);
+  const [form, setForm] = useState({ ...doctor });
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    setName(doctor.name);
-    setQualification(doctor.qualification);
-    setRegNumber(doctor.regNumber);
-    setClinic(doctor.clinic);
-    setPhone(doctor.phone);
-    setAddress(doctor.address);
-  }, [doctor]);
+  useEffect(() => { setForm({ ...doctor }); }, [doctor]);
+
+  const set = (key: keyof typeof form) => (v: string) =>
+    setForm((f) => ({ ...f, [key]: v }));
 
   const handleSave = async () => {
-    await updateDoctor({ name, qualification, regNumber, clinic, phone, address });
+    await updateDoctor(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -53,107 +81,65 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          s.scroll,
-          { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 },
-        ]}
+        contentContainerStyle={[s.scroll, { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={s.card}>
-          <View style={s.doctorIcon}>
-            <Feather name="user" size={28} color={colors.primary} />
-          </View>
-          <Text style={s.cardTitle}>Doctor Information</Text>
+        <FieldGroup title="Doctor Name">
+          <Field label="Name (Bengali)" value={form.nameBn} onChange={set("nameBn")}
+            placeholder="ডাঃ …" />
+          <Field label="Name (English)" value={form.nameEn} onChange={set("nameEn")}
+            placeholder="Dr. Firstname Lastname" />
+        </FieldGroup>
 
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Full Name</Text>
-            <TextInput
-              style={s.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Dr. Firstname Lastname"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Qualifications</Text>
-            <TextInput
-              style={s.input}
-              value={qualification}
-              onChangeText={setQualification}
-              placeholder="MBBS, MS (Ophthalmology)"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Registration Number</Text>
-            <TextInput
-              style={s.input}
-              value={regNumber}
-              onChangeText={setRegNumber}
-              placeholder="e.g. MCI/12345"
-              placeholderTextColor={colors.mutedForeground}
-              autoCapitalize="characters"
-            />
-          </View>
-        </View>
+        <FieldGroup title="Qualifications & Designation">
+          <Field label="Qualifications (Bengali)" value={form.qualificationBn} onChange={set("qualificationBn")}
+            placeholder="এম.বি.বি.এস, এফ.সি.পি.এস" />
+          <Field label="Qualifications (English)" value={form.qualificationEn} onChange={set("qualificationEn")}
+            placeholder="MBBS, MCPS, FCPS-Ophthalmology" />
+          <Field label="Designation (Bengali)" value={form.designationBn} onChange={set("designationBn")}
+            placeholder="সহকারী অধ্যাপক…" />
+          <Field label="Designation (English)" value={form.designationEn} onChange={set("designationEn")}
+            placeholder="Assistant Professor, Ophthalmology" />
+        </FieldGroup>
 
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Clinic / Hospital</Text>
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Clinic Name</Text>
-            <TextInput
-              style={s.input}
-              value={clinic}
-              onChangeText={setClinic}
-              placeholder="e.g. City Eye Clinic"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Contact Number</Text>
-            <TextInput
-              style={s.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="e.g. +91 98765 43210"
-              keyboardType="phone-pad"
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Address</Text>
-            <TextInput
-              style={[s.input, s.multiline]}
-              value={address}
-              onChangeText={setAddress}
-              placeholder="Full clinic address"
-              placeholderTextColor={colors.mutedForeground}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </View>
-        </View>
+        <FieldGroup title="Institution">
+          <Field label="Institution (Bengali)" value={form.institutionBn} onChange={set("institutionBn")}
+            placeholder="বাংলাদেশ মেডিকেল কলেজ…" />
+          <Field label="Institution (English)" value={form.institutionEn} onChange={set("institutionEn")}
+            placeholder="Bangladesh Medical College & Hospital" />
+          <Field label="BMDC / Registration No." value={form.regNumber} onChange={set("regNumber")}
+            placeholder="e.g. A-70599" />
+        </FieldGroup>
+
+        <FieldGroup title="Contact">
+          <Field label="Phone" value={form.phone} onChange={set("phone")}
+            placeholder="+880 …" keyboard="phone-pad" />
+          <Field label="Email" value={form.email} onChange={set("email")}
+            placeholder="dr.name@email.com" keyboard="email-address" />
+        </FieldGroup>
+
+        <FieldGroup title="Chamber / Clinic">
+          <Field label="Chamber Name" value={form.chamberName} onChange={set("chamberName")}
+            placeholder="e.g. College Optima" />
+          <Field label="Chamber Address" value={form.chamberAddress} onChange={set("chamberAddress")}
+            placeholder="Full address…" multiline />
+          <Field label="Chamber Phone" value={form.chamberPhone} onChange={set("chamberPhone")}
+            placeholder="Appointment number" keyboard="phone-pad" />
+        </FieldGroup>
 
         <TouchableOpacity
           style={[s.saveBtn, saved && s.savedBtn]}
           onPress={handleSave}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Feather
-            name={saved ? "check" : "save"}
-            size={18}
-            color="#fff"
-            style={{ marginRight: 8 }}
-          />
+          <Feather name={saved ? "check" : "save"} size={18} color="#fff" style={{ marginRight: 8 }} />
           <Text style={s.saveBtnText}>{saved ? "Saved!" : "Save Profile"}</Text>
         </TouchableOpacity>
 
         <View style={s.infoBox}>
-          <Feather name="info" size={14} color={colors.primary} style={{ marginRight: 8 }} />
+          <Feather name="info" size={13} color={colors.primary} style={{ marginRight: 8, marginTop: 1 }} />
           <Text style={s.infoText}>
-            Your profile details appear on every prescription you write.
+            Your name, qualifications, registration number and chamber details appear on every prescription.
           </Text>
         </View>
       </ScrollView>
@@ -164,104 +150,21 @@ export default function SettingsScreen() {
 const styles = (colors: ReturnType<typeof useColors>) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: {
-      paddingHorizontal: 16,
-      paddingBottom: 14,
-      paddingTop: 8,
-    },
-    title: {
-      fontSize: 26,
-      fontWeight: "700",
-      color: colors.foreground,
-      fontFamily: "Inter_700Bold",
-    },
-    sub: {
-      fontSize: 13,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-      marginTop: 1,
-    },
+    header: { paddingHorizontal: 16, paddingBottom: 14, paddingTop: 8 },
+    title: { fontSize: 26, fontFamily: "Inter_700Bold", color: colors.foreground },
+    sub: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 1 },
     scroll: { paddingHorizontal: 16, paddingTop: 4 },
-    card: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 14,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.06,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    doctorIcon: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      backgroundColor: colors.secondary,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 12,
-    },
-    cardTitle: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.foreground,
-      fontFamily: "Inter_700Bold",
-      marginBottom: 14,
-    },
-    field: { marginBottom: 12 },
-    fieldLabel: {
-      fontSize: 11,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_500Medium",
-      textTransform: "uppercase",
-      letterSpacing: 0.8,
-      marginBottom: 6,
-    },
-    input: {
-      borderWidth: 1.5,
-      borderColor: colors.border,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      fontSize: 14,
-      color: colors.foreground,
-      fontFamily: "Inter_400Regular",
-      backgroundColor: colors.surface,
-    },
-    multiline: { minHeight: 80 },
     saveBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: 14,
-      paddingVertical: 15,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 16,
-      shadowColor: colors.primary,
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.25,
-      shadowRadius: 6,
-      elevation: 4,
+      backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 15,
+      flexDirection: "row", alignItems: "center", justifyContent: "center",
+      marginBottom: 14,
+      shadowColor: colors.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 4,
     },
     savedBtn: { backgroundColor: colors.success },
-    saveBtnText: {
-      color: "#fff",
-      fontSize: 16,
-      fontFamily: "Inter_600SemiBold",
-    },
+    saveBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
     infoBox: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      backgroundColor: colors.secondary,
-      borderRadius: 10,
-      padding: 12,
+      flexDirection: "row", alignItems: "flex-start",
+      backgroundColor: colors.secondary, borderRadius: 10, padding: 12,
     },
-    infoText: {
-      flex: 1,
-      fontSize: 13,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-      lineHeight: 18,
-    },
+    infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 18 },
   });

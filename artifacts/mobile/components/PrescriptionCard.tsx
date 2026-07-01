@@ -1,12 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { Prescription } from "@/types";
 
@@ -15,71 +10,89 @@ interface Props {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+  return new Date(iso).toLocaleDateString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
   });
 }
 
-function eyeSummary(eye: Prescription["rightEye"]): string {
-  const parts: string[] = [];
-  if (eye.sphere) parts.push(`SPH ${eye.sphere}`);
-  if (eye.cylinder) parts.push(`CYL ${eye.cylinder}`);
-  if (eye.axis) parts.push(`Ax ${eye.axis}°`);
-  return parts.join("  ") || "Plano";
+function rxSummary(rx: Prescription): string {
+  const d = rx.rightEyeDistance;
+  if (d.dsp || d.dcyl) {
+    const parts = [];
+    if (d.dsp) parts.push(`SPH ${d.dsp}`);
+    if (d.dcyl) parts.push(`CYL ${d.dcyl}`);
+    return `RE: ${parts.join(", ")}`;
+  }
+  return "No Rx entered";
 }
 
-export function PrescriptionCard({ prescription }: Props) {
+function historyTags(rx: Prescription): string[] {
+  const h = rx.pastHistory;
+  if (!h) return [];
+  return [
+    h.dm && "DM", h.htn && "HTN", h.ihd && "IHD",
+    h.ckd && "CKD", h.ba && "BA",
+  ].filter(Boolean) as string[];
+}
+
+export function PrescriptionCard({ prescription: rx }: Props) {
   const colors = useColors();
   const s = styles(colors);
+  const tags = historyTags(rx);
 
   return (
     <TouchableOpacity
       style={s.card}
-      onPress={() => router.push(`/prescription/${prescription.id}`)}
+      onPress={() => router.push(`/prescription/${rx.id}`)}
       activeOpacity={0.75}
     >
       <View style={s.header}>
         <View style={s.avatar}>
-          <Text style={s.avatarText}>
-            {prescription.patientName.charAt(0).toUpperCase()}
-          </Text>
+          <Text style={s.avatarText}>{rx.patientName.charAt(0).toUpperCase()}</Text>
         </View>
         <View style={s.headerText}>
-          <Text style={s.name}>{prescription.patientName}</Text>
-          <Text style={s.date}>{formatDate(prescription.date)}</Text>
+          <Text style={s.name}>{rx.patientName}</Text>
+          <Text style={s.date}>
+            {rx.patientAge ? `${rx.patientAge}  ·  ` : ""}{formatDate(rx.date)}
+          </Text>
         </View>
-        <View style={s.lensTag}>
-          <Text style={s.lensText}>{prescription.lensType || "SV"}</Text>
+        <View style={s.rightCol}>
+          {rx.lensType ? (
+            <View style={s.lensTag}>
+              <Text style={s.lensText}>
+                {rx.lensType === "Progressive" ? "Prog" :
+                  rx.lensType === "Monofocal" ? "Mono" :
+                  rx.lensType === "Bifocal" ? "Bifocal" : rx.lensType}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
       <View style={s.divider} />
 
-      <View style={s.eyeRow}>
-        <View style={s.eyeBlock}>
-          <Text style={s.eyeLabel}>RE (OD)</Text>
-          <Text style={s.eyeValue} numberOfLines={1}>
-            {eyeSummary(prescription.rightEye)}
-          </Text>
-        </View>
-        <View style={s.eyeSep} />
-        <View style={s.eyeBlock}>
-          <Text style={s.eyeLabel}>LE (OS)</Text>
-          <Text style={s.eyeValue} numberOfLines={1}>
-            {eyeSummary(prescription.leftEye)}
-          </Text>
-        </View>
-      </View>
+      <Text style={s.rxSummary} numberOfLines={1}>{rxSummary(rx)}</Text>
 
-      <Feather
-        name="chevron-right"
-        size={16}
-        color={colors.mutedForeground}
-        style={s.chevron}
-      />
+      {(rx.chiefComplaints || tags.length > 0) && (
+        <View style={s.footer}>
+          {rx.chiefComplaints ? (
+            <Text style={s.cc} numberOfLines={1}>
+              CC: {rx.chiefComplaints}
+            </Text>
+          ) : null}
+          {tags.length > 0 && (
+            <View style={s.tagRow}>
+              {tags.map((t) => (
+                <View key={t} style={s.tag}>
+                  <Text style={s.tagText}>{t}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      <Feather name="chevron-right" size={15} color={colors.mutedForeground} style={s.chevron} />
     </TouchableOpacity>
   );
 }
@@ -98,84 +111,34 @@ const styles = (colors: ReturnType<typeof useColors>) =>
       shadowRadius: 4,
       elevation: 2,
     },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
+    header: { flexDirection: "row", alignItems: "center" },
     avatar: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+      width: 38, height: 38, borderRadius: 19,
       backgroundColor: colors.secondary,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: "center", justifyContent: "center",
     },
     avatarText: {
-      fontSize: 16,
-      fontWeight: "700",
-      color: colors.primary,
-      fontFamily: "Inter_700Bold",
+      fontSize: 16, fontFamily: "Inter_700Bold", color: colors.primary,
     },
-    headerText: {
-      flex: 1,
-      marginLeft: 10,
-    },
-    name: {
-      fontSize: 15,
-      fontWeight: "600",
-      color: colors.foreground,
-      fontFamily: "Inter_600SemiBold",
-    },
-    date: {
-      fontSize: 12,
-      color: colors.mutedForeground,
-      marginTop: 1,
-      fontFamily: "Inter_400Regular",
-    },
+    headerText: { flex: 1, marginLeft: 10 },
+    name: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    date: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 1 },
+    rightCol: { alignItems: "flex-end" },
     lensTag: {
-      backgroundColor: colors.secondary,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      backgroundColor: colors.secondary, borderRadius: 6,
+      paddingHorizontal: 8, paddingVertical: 3,
     },
-    lensText: {
-      fontSize: 11,
-      color: colors.primary,
-      fontWeight: "600",
-      fontFamily: "Inter_600SemiBold",
+    lensText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.primary },
+    divider: { height: 1, backgroundColor: colors.border, marginVertical: 10 },
+    rxSummary: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.foreground },
+    footer: { marginTop: 8, gap: 4 },
+    cc: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, fontStyle: "italic" },
+    tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 2 },
+    tag: {
+      backgroundColor: "#FFF9E6", borderRadius: 4,
+      paddingHorizontal: 6, paddingVertical: 2,
+      borderWidth: 1, borderColor: "#FFD700",
     },
-    divider: {
-      height: 1,
-      backgroundColor: colors.border,
-      marginVertical: 10,
-    },
-    eyeRow: {
-      flexDirection: "row",
-    },
-    eyeBlock: {
-      flex: 1,
-    },
-    eyeSep: {
-      width: 1,
-      backgroundColor: colors.border,
-      marginHorizontal: 12,
-    },
-    eyeLabel: {
-      fontSize: 10,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_500Medium",
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 2,
-    },
-    eyeValue: {
-      fontSize: 13,
-      color: colors.foreground,
-      fontFamily: "Inter_500Medium",
-    },
-    chevron: {
-      position: "absolute",
-      right: 14,
-      bottom: 14,
-    },
+    tagText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#B8860B" },
+    chevron: { position: "absolute", right: 14, top: 22 },
   });

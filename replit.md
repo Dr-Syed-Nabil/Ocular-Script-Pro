@@ -1,6 +1,6 @@
-# [Project name]
+# OptiScript
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+E-prescription writing app for ophthalmologists, covering the full clinical encounter — from VA assessment to spectacle correction.
 
 ## Run & Operate
 
@@ -19,18 +19,37 @@ _Replace the heading above with the project's name, and this line with one sente
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
+- Mobile: Expo (React Native), AsyncStorage for local persistence
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/mobile/` — Expo mobile app
+  - `app/(tabs)/` — main tabs: Prescriptions, Patients, Profile
+  - `app/new-rx.tsx` — full prescription form (modal)
+  - `app/prescription/[id].tsx` — prescription detail view
+  - `app/patient/[id].tsx` — patient detail view
+  - `context/DataContext.tsx` — all local state (AsyncStorage)
+  - `types/index.ts` — shared TypeScript types
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- All data stored locally via AsyncStorage — no server round-trips needed for writing prescriptions
+- Prescription form mirrors the physical pad: VA → history → examination → GAT → spectacle Rx → lens options → advice
+- Doctor profile (Bengali + English bilingual fields) stored separately; shown as header on each Rx
+- EyeSpectacleRx has separate Distance (D) and Near (N) entries per eye to match the pad format
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Full ophthalmology e-prescriber covering:
+- Patient management (search/create)
+- Visual Acuity (UA, WA, PH, BCVA per eye)
+- Chief Complaints + Past History (DM, HTN, IHD, CKD, BA, Thyroid, Uromax)
+- Examination (Adnexa, Anterior Segment, Posterior Segment)
+- GAT/IOP (RE + LE)
+- Spectacle Correction: Distance & Near Rx (SPH, CYL, AXIS, VA) + IPD
+- Lens Options: usage, type (mono/bifocal/progressive), coating (blue-cut/photosun/AR), material
+- Advice (উপদেশ) + Follow-up
+- Doctor profile: bilingual (Bengali/English) name, qualifications, designation, institution, BMDC reg, chamber details
 
 ## User preferences
 
@@ -38,7 +57,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- `EyeInputGroup.tsx` is an old component no longer used in the main form; can be removed
+- The `surface` color key must exist in colors.ts or components referencing it will fail
 
 ## Pointers
 

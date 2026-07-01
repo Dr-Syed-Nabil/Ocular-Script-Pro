@@ -14,142 +14,166 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
-import { EyePrescription } from "@/types";
+import { EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
+    day: "2-digit", month: "long", year: "numeric",
   });
 }
 
-function EyeRow({
-  label,
-  eye,
-  colors,
-}: {
-  label: string;
-  eye: EyePrescription;
-  colors: ReturnType<typeof useColors>;
+function SectionBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  const colors = useColors();
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+        <View style={{ width: 3, height: 14, borderRadius: 2, backgroundColor: colors.primary, marginRight: 7 }} />
+        <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.9 }}>
+          {title}
+        </Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function InfoCard({ children }: { children: React.ReactNode }) {
+  const colors = useColors();
+  return (
+    <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 }}>
+      {children}
+    </View>
+  );
+}
+
+function LabelValue({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  if (!value) return null;
+  return (
+    <View style={{ marginBottom: 6 }}>
+      <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 2 }}>{label}</Text>
+      <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 20 }}>{value}</Text>
+    </View>
+  );
+}
+
+function VASection({ reVA, leVA }: { reVA: EyeVA; leVA: EyeVA }) {
+  const colors = useColors();
+  const hasData = reVA.ua || reVA.wa || reVA.ph || reVA.bcva || leVA.ua || leVA.wa || leVA.ph || leVA.bcva;
+  if (!hasData) return null;
+  const fields: { key: keyof EyeVA; label: string }[] = [
+    { key: "ua", label: "UA" }, { key: "wa", label: "WA" },
+    { key: "ph", label: "PH" }, { key: "bcva", label: "BCVA" },
+  ];
+  return (
+    <SectionBlock title="Visual Acuity">
+      <InfoCard>
+        <View style={{ flexDirection: "row", marginBottom: 8 }}>
+          <View style={{ width: 52 }} />
+          <Text style={{ flex: 1, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.primary, textAlign: "center" }}>RE (OD)</Text>
+          <Text style={{ flex: 1, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.primary, textAlign: "center" }}>LE (OS)</Text>
+        </View>
+        {fields.map(({ key, label }) => {
+          const re = reVA[key]; const le = leVA[key];
+          if (!re && !le) return null;
+          return (
+            <View key={key} style={{ flexDirection: "row", paddingVertical: 4, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <Text style={{ width: 52, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground }}>{label}</Text>
+              <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, textAlign: "center" }}>{re || "—"}</Text>
+              <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, textAlign: "center" }}>{le || "—"}</Text>
+            </View>
+          );
+        })}
+      </InfoCard>
+    </SectionBlock>
+  );
+}
+
+function RxTable({ reD, leD, reN, leN, ipd }: {
+  reD: EyeSpectacleRx; leD: EyeSpectacleRx;
+  reN: EyeSpectacleRx; leN: EyeSpectacleRx;
+  ipd: string;
 }) {
-  const s = eyeStyles(colors);
-  const hasData =
-    eye.sphere || eye.cylinder || eye.axis || eye.addPower || eye.va;
+  const colors = useColors();
+  const hasDist = reD.dsp || reD.dcyl || leD.dsp || leD.dcyl;
+  const hasNear = reN.dsp || reN.dcyl || leN.dsp || leN.dcyl;
+  if (!hasDist && !hasNear && !ipd) return null;
+
+  const RxRow = ({ eye, rx, label }: { eye: string; rx: EyeSpectacleRx; label: string }) => {
+    const vals = [rx.dsp, rx.dcyl, rx.axis ? `${rx.axis}°` : "", rx.va];
+    if (!vals.some(Boolean)) return null;
+    return (
+      <View style={{ flexDirection: "row", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border, alignItems: "center" }}>
+        <View style={{ width: 36 }}>
+          <Text style={{ fontSize: 10, fontFamily: "Inter_700Bold", color: colors.primary, textAlign: "center" }}>{eye}</Text>
+        </View>
+        {[rx.dsp || "—", rx.dcyl || "—", rx.axis ? `${rx.axis}°` : "—", rx.va || "—"].map((v, i) => (
+          <Text key={i} style={{ flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, textAlign: "center" }}>{v}</Text>
+        ))}
+      </View>
+    );
+  };
+
+  const TableBlock = ({ title, re, le }: { title: string; re: EyeSpectacleRx; le: EyeSpectacleRx }) => {
+    if (!re.dsp && !re.dcyl && !le.dsp && !le.dcyl) return null;
+    return (
+      <>
+        <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 12, paddingVertical: 6 }}>
+          <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: colors.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>{title}</Text>
+        </View>
+        <View style={{ flexDirection: "row", paddingHorizontal: 0, paddingVertical: 4 }}>
+          <View style={{ width: 36 }} />
+          {["SPH", "CYL", "AXIS", "VA"].map((h) => (
+            <Text key={h} style={{ flex: 1, fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", textAlign: "center" }}>{h}</Text>
+          ))}
+        </View>
+        <RxRow eye="RE" rx={re} label="RE" />
+        <RxRow eye="LE" rx={le} label="LE" />
+      </>
+    );
+  };
 
   return (
-    <View style={s.eyeCard}>
-      <View style={s.eyeHeader}>
-        <View style={s.eyeDot} />
-        <Text style={s.eyeLabel}>{label}</Text>
-        {eye.va ? (
-          <View style={s.vaTag}>
-            <Text style={s.vaTagText}>VA {eye.va}</Text>
+    <SectionBlock title="Spectacle Correction">
+      <View style={{ backgroundColor: colors.card, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
+        <TableBlock title="Distance (D)" re={reD} le={leD} />
+        {hasDist && hasNear && <View style={{ height: 2, backgroundColor: colors.border }} />}
+        <TableBlock title="Near (N)" re={reN} le={leN} />
+        {ipd ? (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>IPD</Text>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: colors.primary }}>{ipd} mm</Text>
           </View>
         ) : null}
       </View>
-      {hasData ? (
-        <View style={s.eyeGrid}>
-          <EyeField label="SPH" value={eye.sphere || "—"} colors={colors} />
-          <EyeField label="CYL" value={eye.cylinder || "—"} colors={colors} />
-          <EyeField label="AXIS" value={eye.axis ? `${eye.axis}°` : "—"} colors={colors} />
-          <EyeField label="ADD" value={eye.addPower || "—"} colors={colors} />
-        </View>
-      ) : (
-        <Text style={s.noData}>No data entered</Text>
-      )}
-    </View>
+    </SectionBlock>
   );
 }
 
-function EyeField({
-  label,
-  value,
-  colors,
-}: {
-  label: string;
-  value: string;
-  colors: ReturnType<typeof useColors>;
-}) {
-  const s = eyeStyles(colors);
+function HistoryBadges({ h }: { h: PastHistory }) {
+  const colors = useColors();
+  const items = [
+    h.dm && "DM", h.htn && "HTN", h.ihd && "IHD", h.ckd && "CKD",
+    h.ba && "BA", h.thyDs && "Thyroid Ds", h.uromax && "Uromax",
+  ].filter(Boolean) as string[];
+  if (items.length === 0 && !h.others) return (
+    <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, fontStyle: "italic" }}>None recorded</Text>
+  );
   return (
-    <View style={s.eyeFieldBlock}>
-      <Text style={s.efLabel}>{label}</Text>
-      <Text style={s.efValue}>{value}</Text>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+      {items.map((it) => (
+        <View key={it} style={{ backgroundColor: "#FFF3CD", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: "#FFD700" }}>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#B8860B" }}>{it}</Text>
+        </View>
+      ))}
+      {h.others ? (
+        <View style={{ backgroundColor: colors.secondary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: colors.foreground }}>{h.others}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
-
-const eyeStyles = (colors: ReturnType<typeof useColors>) =>
-  StyleSheet.create({
-    eyeCard: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 10,
-    },
-    eyeHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginBottom: 12,
-    },
-    eyeDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: colors.primary,
-      marginRight: 8,
-    },
-    eyeLabel: {
-      flex: 1,
-      fontSize: 14,
-      fontWeight: "700",
-      color: colors.primary,
-      fontFamily: "Inter_700Bold",
-    },
-    vaTag: {
-      backgroundColor: colors.secondary,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-    },
-    vaTagText: {
-      fontSize: 11,
-      color: colors.primary,
-      fontFamily: "Inter_600SemiBold",
-    },
-    eyeGrid: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    eyeFieldBlock: {
-      flex: 1,
-      alignItems: "center",
-      backgroundColor: colors.surface,
-      borderRadius: 8,
-      paddingVertical: 10,
-    },
-    efLabel: {
-      fontSize: 9,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_500Medium",
-      textTransform: "uppercase",
-      letterSpacing: 0.8,
-      marginBottom: 4,
-    },
-    efValue: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.foreground,
-      fontFamily: "Inter_700Bold",
-    },
-    noData: {
-      fontSize: 13,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-      fontStyle: "italic",
-    },
-  });
 
 export default function PrescriptionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -158,16 +182,16 @@ export default function PrescriptionDetailScreen() {
   const { prescriptions, deletePrescription, doctor } = useData();
   const s = styles(colors);
 
-  const prescription = prescriptions.find((r) => r.id === id);
+  const rx = prescriptions.find((r) => r.id === id);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
-  if (!prescription) {
+  if (!rx) {
     return (
       <View style={[s.container, { paddingTop: topPad }]}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
-        <View style={s.notFound}>
+        <View style={s.centered}>
           <Text style={s.notFoundText}>Prescription not found.</Text>
         </View>
       </View>
@@ -175,106 +199,159 @@ export default function PrescriptionDetailScreen() {
   }
 
   const handleDelete = () => {
-    Alert.alert(
-      "Delete Prescription",
-      "Are you sure you want to delete this prescription? This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await deletePrescription(prescription.id);
-            router.back();
-          },
+    Alert.alert("Delete Prescription", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete", style: "destructive",
+        onPress: async () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          await deletePrescription(rx.id);
+          router.back();
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const pd =
-    prescription.pdMode === "binocular"
-      ? prescription.pdBinocular
-        ? `${prescription.pdBinocular} mm`
-        : "—"
-      : prescription.pdRight && prescription.pdLeft
-      ? `R: ${prescription.pdRight}  /  L: ${prescription.pdLeft} mm`
-      : "—";
+  const lensOpts = [rx.lensUsage, rx.lensType, ...(rx.lensCoating || []), rx.lensMaterial].filter(Boolean);
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
       <View style={s.navBar}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={s.navTitle} numberOfLines={1}>
-          {prescription.patientName}
-        </Text>
-        <TouchableOpacity style={s.deleteBtn} onPress={handleDelete}>
-          <Feather name="trash-2" size={18} color={colors.destructive} />
+        <Text style={s.navTitle} numberOfLines={1}>{rx.patientName}</Text>
+        <TouchableOpacity style={s.iconBtn} onPress={handleDelete}>
+          <Feather name="trash-2" size={17} color={colors.destructive} />
         </TouchableOpacity>
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          s.scroll,
-          { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 },
-        ]}
+        contentContainerStyle={[s.scroll, { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={s.meta}>
+        {/* Doctor header */}
+        {(doctor.nameEn || doctor.nameBn) && (
+          <View style={s.doctorHeader}>
+            <View style={{ flex: 1 }}>
+              {doctor.nameBn ? <Text style={s.doctorNameBn}>{doctor.nameBn}</Text> : null}
+              {doctor.nameEn ? <Text style={s.doctorNameEn}>{doctor.nameEn}</Text> : null}
+              {doctor.qualificationEn ? <Text style={s.doctorSub}>{doctor.qualificationEn}</Text> : null}
+              {doctor.designationEn ? <Text style={s.doctorSub}>{doctor.designationEn}</Text> : null}
+              {doctor.institutionEn ? <Text style={s.doctorSub}>{doctor.institutionEn}</Text> : null}
+              {doctor.regNumber ? <Text style={s.doctorReg}>Reg. No: {doctor.regNumber}</Text> : null}
+            </View>
+            {(doctor.phone || doctor.email) && (
+              <View style={{ alignItems: "flex-end" }}>
+                {doctor.phone ? <Text style={s.doctorContact}>{doctor.phone}</Text> : null}
+                {doctor.email ? <Text style={s.doctorContact}>{doctor.email}</Text> : null}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Patient meta */}
+        <View style={s.metaCard}>
           <View style={s.metaAvatar}>
-            <Text style={s.metaAvatarText}>
-              {prescription.patientName.charAt(0).toUpperCase()}
+            <Text style={s.metaAvatarText}>{rx.patientName.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.metaName}>{rx.patientName}</Text>
+            <Text style={s.metaSub}>
+              {rx.patientAge ? `Age: ${rx.patientAge}  ·  ` : ""}{formatDate(rx.date)}
             </Text>
           </View>
-          <View style={s.metaInfo}>
-            <Text style={s.metaName}>{prescription.patientName}</Text>
-            <Text style={s.metaDate}>{formatDate(prescription.date)}</Text>
-            {prescription.lensType ? (
-              <View style={s.lensTag}>
-                <Text style={s.lensTagText}>{prescription.lensType}</Text>
-              </View>
-            ) : null}
-          </View>
         </View>
 
-        <Text style={s.sectionTitle}>Prescription</Text>
-        <EyeRow label="Right Eye (OD)" eye={prescription.rightEye} colors={colors} />
-        <EyeRow label="Left Eye (OS)" eye={prescription.leftEye} colors={colors} />
-
-        <Text style={s.sectionTitle}>Pupillary Distance</Text>
-        <View style={s.infoCard}>
-          <Feather name="maximize" size={16} color={colors.primary} style={{ marginRight: 10 }} />
-          <Text style={s.infoValue}>{pd}</Text>
-        </View>
-
-        {prescription.notes ? (
-          <>
-            <Text style={s.sectionTitle}>Clinical Notes</Text>
-            <View style={s.notesCard}>
-              <Text style={s.notesText}>{prescription.notes}</Text>
-            </View>
-          </>
+        {/* Chief Complaints */}
+        {rx.chiefComplaints ? (
+          <SectionBlock title="Chief Complaints">
+            <InfoCard><Text style={s.bodyText}>{rx.chiefComplaints}</Text></InfoCard>
+          </SectionBlock>
         ) : null}
 
-        {(doctor.name || doctor.clinic) && (
-          <View style={s.doctorFooter}>
-            <Feather name="user" size={14} color={colors.mutedForeground} style={{ marginRight: 8 }} />
-            <View>
-              {doctor.name ? (
-                <Text style={s.doctorName}>
-                  {doctor.name}
-                  {doctor.qualification ? `, ${doctor.qualification}` : ""}
-                </Text>
-              ) : null}
-              {doctor.regNumber ? (
-                <Text style={s.doctorReg}>Reg. No: {doctor.regNumber}</Text>
-              ) : null}
-              {doctor.clinic ? (
-                <Text style={s.doctorClinic}>{doctor.clinic}</Text>
-              ) : null}
+        {/* Past History */}
+        <SectionBlock title="Past History">
+          <InfoCard><HistoryBadges h={rx.pastHistory} /></InfoCard>
+        </SectionBlock>
+
+        {/* VA */}
+        <VASection reVA={rx.rightEyeVA} leVA={rx.leftEyeVA} />
+
+        {/* Examination */}
+        {(rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) && (
+          <SectionBlock title="Examination Findings">
+            <InfoCard>
+              <LabelValue label="Adnexa" value={rx.adnexa} />
+              <LabelValue label="Anterior Segment" value={rx.anteriorSegment} />
+              <LabelValue label="Posterior Segment" value={rx.posteriorSegment} />
+            </InfoCard>
+          </SectionBlock>
+        )}
+
+        {/* GAT */}
+        {(rx.gatRight || rx.gatLeft) && (
+          <SectionBlock title="GAT / Intraocular Pressure">
+            <InfoCard>
+              <View style={{ flexDirection: "row", gap: 20 }}>
+                {rx.gatRight ? (
+                  <View style={s.gatBlock}>
+                    <Text style={s.gatLabel}>RE</Text>
+                    <Text style={s.gatValue}>{rx.gatRight} <Text style={s.gatUnit}>mmHg</Text></Text>
+                  </View>
+                ) : null}
+                {rx.gatLeft ? (
+                  <View style={s.gatBlock}>
+                    <Text style={s.gatLabel}>LE</Text>
+                    <Text style={s.gatValue}>{rx.gatLeft} <Text style={s.gatUnit}>mmHg</Text></Text>
+                  </View>
+                ) : null}
+              </View>
+            </InfoCard>
+          </SectionBlock>
+        )}
+
+        {/* Spectacle Rx */}
+        <RxTable reD={rx.rightEyeDistance} leD={rx.leftEyeDistance} reN={rx.rightEyeNear} leN={rx.leftEyeNear} ipd={rx.ipd} />
+
+        {/* Lens Options */}
+        {lensOpts.length > 0 && (
+          <SectionBlock title="Lens Options">
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {lensOpts.map((opt) => (
+                <View key={opt} style={{ backgroundColor: colors.secondary, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.primary + "40" }}>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: colors.primary }}>{opt}</Text>
+                </View>
+              ))}
+            </View>
+          </SectionBlock>
+        )}
+
+        {/* Advice */}
+        {rx.advice ? (
+          <SectionBlock title="Advice (উপদেশ)">
+            <InfoCard><Text style={s.bodyText}>{rx.advice}</Text></InfoCard>
+          </SectionBlock>
+        ) : null}
+
+        {/* Follow-up */}
+        {rx.followUp ? (
+          <SectionBlock title="Follow-up">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Feather name="calendar" size={16} color={colors.primary} />
+              <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>{rx.followUp}</Text>
+            </View>
+          </SectionBlock>
+        ) : null}
+
+        {/* Chamber footer */}
+        {(doctor.chamberName || doctor.chamberAddress) && (
+          <View style={s.chamberFooter}>
+            <Feather name="map-pin" size={13} color={colors.primary} style={{ marginRight: 8, marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              {doctor.chamberName ? <Text style={s.chamberName}>{doctor.chamberName}</Text> : null}
+              {doctor.chamberAddress ? <Text style={s.chamberAddr}>{doctor.chamberAddress}</Text> : null}
+              {doctor.chamberPhone ? <Text style={s.chamberAddr}>{doctor.chamberPhone}</Text> : null}
             </View>
           </View>
         )}
@@ -287,155 +364,58 @@ const styles = (colors: ReturnType<typeof useColors>) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     navBar: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 16,
-      paddingBottom: 12,
-      paddingTop: 4,
+      flexDirection: "row", alignItems: "center",
+      paddingHorizontal: 16, paddingBottom: 10, paddingTop: 4,
     },
-    backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.muted,
-      alignItems: "center",
-      justifyContent: "center",
+    iconBtn: {
+      width: 36, height: 36, borderRadius: 18,
+      backgroundColor: colors.muted, alignItems: "center", justifyContent: "center",
     },
     navTitle: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 17,
-      fontWeight: "700",
-      color: colors.foreground,
-      fontFamily: "Inter_700Bold",
+      flex: 1, textAlign: "center", fontSize: 17,
+      fontFamily: "Inter_700Bold", color: colors.foreground,
     },
-    deleteBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.muted,
-      alignItems: "center",
-      justifyContent: "center",
+    scroll: { paddingHorizontal: 16, paddingTop: 4 },
+    centered: { flex: 1, alignItems: "center", justifyContent: "center" },
+    notFoundText: { fontSize: 16, color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+
+    doctorHeader: {
+      backgroundColor: colors.card, borderRadius: 14, padding: 14,
+      flexDirection: "row", marginBottom: 12,
+      borderLeftWidth: 3, borderLeftColor: colors.primary,
+      shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
     },
-    scroll: { paddingHorizontal: 16 },
-    meta: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 8,
+    doctorNameBn: { fontSize: 14, fontFamily: "Inter_700Bold", color: colors.foreground },
+    doctorNameEn: { fontSize: 15, fontFamily: "Inter_700Bold", color: colors.primary, marginTop: 1 },
+    doctorSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.foreground, marginTop: 1 },
+    doctorReg: { fontSize: 11, fontFamily: "Inter_500Medium", color: colors.mutedForeground, marginTop: 4 },
+    doctorContact: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, textAlign: "right", marginBottom: 1 },
+
+    metaCard: {
+      backgroundColor: colors.card, borderRadius: 14, padding: 14,
+      flexDirection: "row", alignItems: "center", marginBottom: 16,
+      shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
     },
     metaAvatar: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      backgroundColor: colors.secondary,
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: 14,
+      width: 46, height: 46, borderRadius: 23,
+      backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", marginRight: 12,
     },
-    metaAvatarText: {
-      fontSize: 22,
-      fontWeight: "700",
-      color: colors.primary,
-      fontFamily: "Inter_700Bold",
+    metaAvatarText: { fontSize: 20, fontFamily: "Inter_700Bold", color: colors.primary },
+    metaName: { fontSize: 17, fontFamily: "Inter_700Bold", color: colors.foreground },
+    metaSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 },
+
+    bodyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 22 },
+
+    gatBlock: { alignItems: "flex-start" },
+    gatLabel: { fontSize: 10, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
+    gatValue: { fontSize: 20, fontFamily: "Inter_700Bold", color: colors.foreground },
+    gatUnit: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+
+    chamberFooter: {
+      flexDirection: "row", alignItems: "flex-start",
+      marginTop: 12, padding: 12,
+      backgroundColor: colors.secondary, borderRadius: 10,
     },
-    metaInfo: { flex: 1 },
-    metaName: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: colors.foreground,
-      fontFamily: "Inter_700Bold",
-    },
-    metaDate: {
-      fontSize: 13,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-      marginTop: 2,
-    },
-    lensTag: {
-      marginTop: 6,
-      alignSelf: "flex-start",
-      backgroundColor: colors.secondary,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-    },
-    lensTagText: {
-      fontSize: 11,
-      color: colors.primary,
-      fontFamily: "Inter_600SemiBold",
-    },
-    sectionTitle: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: colors.mutedForeground,
-      fontFamily: "Inter_600SemiBold",
-      textTransform: "uppercase",
-      letterSpacing: 0.8,
-      marginTop: 18,
-      marginBottom: 8,
-    },
-    infoCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 14,
-    },
-    infoValue: {
-      fontSize: 15,
-      color: colors.foreground,
-      fontFamily: "Inter_600SemiBold",
-    },
-    notesCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 14,
-    },
-    notesText: {
-      fontSize: 14,
-      color: colors.foreground,
-      fontFamily: "Inter_400Regular",
-      lineHeight: 22,
-    },
-    doctorFooter: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      marginTop: 20,
-      padding: 14,
-      backgroundColor: colors.secondary,
-      borderRadius: 12,
-      borderLeftWidth: 3,
-      borderLeftColor: colors.primary,
-    },
-    doctorName: {
-      fontSize: 13,
-      fontWeight: "600",
-      color: colors.foreground,
-      fontFamily: "Inter_600SemiBold",
-    },
-    doctorReg: {
-      fontSize: 12,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-      marginTop: 1,
-    },
-    doctorClinic: {
-      fontSize: 12,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-      marginTop: 1,
-    },
-    notFound: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    notFoundText: {
-      fontSize: 16,
-      color: colors.mutedForeground,
-      fontFamily: "Inter_400Regular",
-    },
+    chamberName: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    chamberAddr: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 1 },
   });
