@@ -1,20 +1,25 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { router, useLocalSearchParams } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
   Alert,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
+import { generateFullPrintHTML, generateRxPadHTML } from "@/utils/generatePrescriptionHTML";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
@@ -181,9 +186,38 @@ export default function PrescriptionDetailScreen() {
   const insets = useSafeAreaInsets();
   const { prescriptions, deletePrescription, doctor } = useData();
   const s = styles(colors);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const rx = prescriptions.find((r) => r.id === id);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  const handlePrint = async (mode: "full" | "pad") => {
+    if (!rx) return;
+    setShowPrintModal(false);
+    setPrinting(true);
+    try {
+      const html = mode === "full"
+        ? generateFullPrintHTML(rx, doctor)
+        : generateRxPadHTML(rx);
+      if (Platform.OS === "web") {
+        const win = window.open("", "_blank");
+        if (win) { win.document.write(html); win.document.close(); win.print(); }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `Prescription — ${rx.patientName}` });
+        } else {
+          await Print.printAsync({ html });
+        }
+      }
+    } catch (e) {
+      Alert.alert("Print Error", "Could not generate PDF.");
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   if (!rx) {
     return (
@@ -216,14 +250,55 @@ export default function PrescriptionDetailScreen() {
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
+      {/* Print mode modal */}
+      <Modal visible={showPrintModal} transparent animationType="fade" onRequestClose={() => setShowPrintModal(false)}>
+        <TouchableWithoutFeedback onPress={() => setShowPrintModal(false)}>
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} />
+        </TouchableWithoutFeedback>
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.card, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: insets.bottom + 20 }}>
+          <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: "center", marginBottom: 16 }} />
+          <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: colors.foreground, marginBottom: 6 }}>Print Prescription</Text>
+          <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 20, lineHeight: 19 }}>Choose a print mode depending on your paper source.</Text>
+
+          <TouchableOpacity style={{ backgroundColor: colors.primary, borderRadius: 14, padding: 16, marginBottom: 12 }} onPress={() => handlePrint("full")}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Feather name="file-text" size={22} color="#fff" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" }}>Blank Paper</Text>
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)", marginTop: 2 }}>Full prescription with doctor header, template colours &amp; all sections. Feed blank A4 paper.</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ backgroundColor: colors.card, borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: colors.border }} onPress={() => handlePrint("pad")}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Feather name="layout" size={22} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>Rx Pad Overlay</Text>
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 }}>Data only — no headers or colours. Feed your pre-printed Rx pad and this fills in the blanks.</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ marginTop: 14, alignItems: "center", padding: 10 }} onPress={() => setShowPrintModal(false)}>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       <View style={s.navBar}>
         <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={s.navTitle} numberOfLines={1}>{rx.patientName}</Text>
-        <TouchableOpacity style={s.iconBtn} onPress={handleDelete}>
-          <Feather name="trash-2" size={17} color={colors.destructive} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity style={[s.iconBtn, printing && { opacity: 0.5 }]} onPress={() => setShowPrintModal(true)} disabled={printing}>
+            <Feather name={printing ? "loader" : "printer"} size={17} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.iconBtn} onPress={handleDelete}>
+            <Feather name="trash-2" size={17} color={colors.destructive} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView

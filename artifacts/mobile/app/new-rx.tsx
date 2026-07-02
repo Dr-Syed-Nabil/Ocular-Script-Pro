@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Platform,
@@ -15,6 +15,11 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SmartInput } from "@/components/SmartInput";
 import { VAPicker } from "@/components/VAPicker";
+import {
+  ADD_VALUES, AXIS_VALUES, CYL_VALUES, SPH_VALUES,
+  SpectacleValuePicker,
+  formatAdd, formatAxis, formatSphCyl,
+} from "@/components/SpectacleValuePicker";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { useSuggestions } from "@/hooks/useSuggestions";
@@ -158,60 +163,124 @@ function VATable({ reVA, leVA, onChangeRe, onChangeLe }: {
 
 /* ───────── Spectacle Table ───────── */
 
-function SpectacleTable({ reD, leD, reN, leN, ipd, onChangeRxD, onChangeRxN, onChangeIPD }: {
-  reD: EyeSpectacleRx; leD: EyeSpectacleRx;
-  reN: EyeSpectacleRx; leN: EyeSpectacleRx;
-  ipd: string;
-  onChangeRxD: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
-  onChangeRxN: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
-  onChangeIPD: (v: string) => void;
+function RxBlock({ title, re, le, onFn, readOnly }: {
+  title: string; re: EyeSpectacleRx; le: EyeSpectacleRx;
+  onFn: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
+  readOnly?: boolean;
 }) {
   const colors = useColors();
-  const cols: { key: keyof EyeSpectacleRx; label: string }[] = [
-    { key: "dsp", label: "SPH" }, { key: "dcyl", label: "CYL" },
-    { key: "axis", label: "AXIS" }, { key: "va", label: "VA" },
-  ];
-
-  const RxBlock = ({ title, re, le, onFn }: { title: string; re: EyeSpectacleRx; le: EyeSpectacleRx; onFn: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void }) => (
+  return (
     <>
       <View style={{ backgroundColor: colors.secondary, paddingVertical: 6, paddingHorizontal: 12 }}>
         <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>{title}</Text>
       </View>
-      {(["re", "le"] as const).map((eye) => (
-        <View key={eye} style={{ flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border }}>
-          <Text style={{ width: 28, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground, paddingBottom: 8 }}>{eye === "re" ? "RE" : "LE"}</Text>
-          {cols.map(({ key, label }) => (
-            <View key={key} style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
-              {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>{label}</Text>}
+      {(["re", "le"] as const).map((eye) => {
+        const rx = eye === "re" ? re : le;
+        return (
+          <View key={eye} style={{ flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border }}>
+            <Text style={{ width: 28, fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground, paddingBottom: 10 }}>{eye === "re" ? "RE" : "LE"}</Text>
+            {/* SPH */}
+            <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
+              {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>SPH</Text>}
+              {readOnly ? (
+                <View style={{ width: "100%", borderWidth: 1.5, borderColor: colors.primary + "60", borderRadius: 6, paddingVertical: 9, alignItems: "center", backgroundColor: colors.secondary }}>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>{rx.dsp || "—"}</Text>
+                </View>
+              ) : (
+                <SpectacleValuePicker values={SPH_VALUES} value={rx.dsp} onChange={(v) => onFn(eye, "dsp", v)} format={formatSphCyl} placeholder="SPH" />
+              )}
+            </View>
+            {/* CYL */}
+            <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
+              {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>CYL</Text>}
+              {readOnly ? (
+                <View style={{ width: "100%", borderWidth: 1.5, borderColor: colors.primary + "60", borderRadius: 6, paddingVertical: 9, alignItems: "center", backgroundColor: colors.secondary }}>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>{rx.dcyl || "—"}</Text>
+                </View>
+              ) : (
+                <SpectacleValuePicker values={CYL_VALUES} value={rx.dcyl} onChange={(v) => onFn(eye, "dcyl", v)} format={formatSphCyl} placeholder="CYL" />
+              )}
+            </View>
+            {/* AXIS */}
+            <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
+              {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>AXIS</Text>}
+              {readOnly ? (
+                <View style={{ width: "100%", borderWidth: 1.5, borderColor: colors.primary + "60", borderRadius: 6, paddingVertical: 9, alignItems: "center", backgroundColor: colors.secondary }}>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>{rx.axis ? (rx.axis.includes("°") ? rx.axis : rx.axis + "°") : "—"}</Text>
+                </View>
+              ) : (
+                <SpectacleValuePicker values={AXIS_VALUES} value={rx.axis} onChange={(v) => onFn(eye, "axis", v)} format={formatAxis} placeholder="AXIS" />
+              )}
+            </View>
+            {/* VA — always free text */}
+            <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
+              {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>VA</Text>}
               <TextInput
                 style={{ width: "100%", borderWidth: 1.5, borderColor: colors.border, borderRadius: 6, paddingVertical: 7, fontSize: 13, fontFamily: "Inter_500Medium", color: colors.foreground, textAlign: "center", backgroundColor: colors.surface }}
-                value={(eye === "re" ? re : le)[key]}
-                onChangeText={(v) => onFn(eye, key, v)}
-                placeholder={key === "axis" ? "°" : key === "va" ? "6/6" : "0.00"}
-                placeholderTextColor={colors.mutedForeground}
-                keyboardType={key === "va" ? "default" : "numbers-and-punctuation"}
-                autoCorrect={false}
+                value={rx.va} onChangeText={(v) => onFn(eye, "va", v)}
+                placeholder="6/6" placeholderTextColor={colors.mutedForeground} autoCorrect={false}
               />
             </View>
-          ))}
-        </View>
-      ))}
+          </View>
+        );
+      })}
     </>
   );
+}
 
+function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRxD, onChangeRxN, onChangeIPD, onChangeAdd }: {
+  reD: EyeSpectacleRx; leD: EyeSpectacleRx;
+  reN: EyeSpectacleRx; leN: EyeSpectacleRx;
+  ipd: string; nearIPD: string; addValue: string;
+  onChangeRxD: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
+  onChangeRxN: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
+  onChangeIPD: (v: string) => void;
+  onChangeAdd: (v: string) => void;
+}) {
+  const colors = useColors();
   return (
     <View style={{ backgroundColor: colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
       <RxBlock title="Distance (D)" re={reD} le={leD} onFn={onChangeRxD} />
-      <View style={{ height: 2, backgroundColor: colors.border }} />
-      <RxBlock title="Near (N)" re={reN} le={leN} onFn={onChangeRxN} />
-      <View style={{ borderTopWidth: 2, borderTopColor: colors.border, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 }}>
-        <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>IPD (mm)</Text>
-        <TextInput
-          style={{ width: 80, borderWidth: 1.5, borderColor: colors.border, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 10, fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, textAlign: "center", backgroundColor: colors.surface }}
-          value={ipd} onChangeText={onChangeIPD}
-          placeholder="64" keyboardType="decimal-pad"
-          placeholderTextColor={colors.mutedForeground}
-        />
+
+      {/* ── Presbyopic Addition ── */}
+      <View style={{ borderTopWidth: 2, borderTopColor: colors.border, backgroundColor: colors.secondary + "80", paddingHorizontal: 12, paddingVertical: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View>
+            <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary }}>Presbyopic Addition</Text>
+            <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 1 }}>Auto-fills Near SPH for both eyes</Text>
+          </View>
+          <SpectacleValuePicker
+            values={ADD_VALUES} value={addValue} onChange={onChangeAdd}
+            format={formatAdd} placeholder="0.00 Add"
+            accentColor="#0FA3B1"
+          />
+        </View>
+      </View>
+
+      <RxBlock title="Near (N) — auto-filled" re={reN} le={leN} onFn={onChangeRxN} readOnly={!!addValue} />
+
+      {/* ── IPD ── */}
+      <View style={{ borderTopWidth: 2, borderTopColor: colors.border, paddingHorizontal: 12, paddingVertical: 10 }}>
+        <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>IPD (mm)</Text>
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, marginBottom: 4 }}>Distance</Text>
+            <TextInput
+              style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10, fontSize: 16, fontFamily: "Inter_700Bold", color: colors.foreground, textAlign: "center", backgroundColor: colors.surface }}
+              value={ipd} onChangeText={(v) => onChangeIPD(v.replace(/[^0-9]/g, "").slice(0, 2))}
+              placeholder="64" keyboardType="number-pad" maxLength={2}
+              placeholderTextColor={colors.mutedForeground}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, marginBottom: 4 }}>Near (auto)</Text>
+            <View style={{ borderWidth: 1.5, borderColor: nearIPD ? colors.accent + "80" : colors.border, borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10, backgroundColor: nearIPD ? colors.secondary : colors.surface, alignItems: "center" }}>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: nearIPD ? colors.accent : colors.mutedForeground }}>
+                {nearIPD || "—"}
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -368,6 +437,24 @@ export default function NewRxScreen() {
   const [reN, setReN] = useState<EyeSpectacleRx>(EMPTY_RX);
   const [leN, setLeN] = useState<EyeSpectacleRx>(EMPTY_RX);
   const [ipd, setIpd] = useState("");
+  const [addValue, setAddValue] = useState("");
+
+  // Near IPD = Distance IPD - 4
+  const nearIPD = ipd && !isNaN(parseInt(ipd)) ? String(Math.max(0, parseInt(ipd) - 4)) : "";
+
+  // Auto-fill Near SPH when Add changes; copy CYL + AXIS from Distance
+  useEffect(() => {
+    if (!addValue) return;
+    const add = parseFloat(addValue.replace("+", "")) || 0;
+    const applyAdd = (distSph: string): string => {
+      const d = parseFloat(distSph.replace("+", "")) || 0;
+      const r = Math.round((d + add) * 100) / 100;
+      if (r === 0) return "0.00";
+      return r > 0 ? `+${r.toFixed(2)}` : r.toFixed(2);
+    };
+    setReN((prev) => ({ ...prev, dsp: applyAdd(reD.dsp), dcyl: reD.dcyl, axis: reD.axis }));
+    setLeN((prev) => ({ ...prev, dsp: applyAdd(leD.dsp), dcyl: leD.dcyl, axis: leD.axis }));
+  }, [addValue, reD.dsp, leD.dsp, reD.dcyl, leD.dcyl, reD.axis, leD.axis]);
 
   const [lensUsage, setLensUsage] = useState("");
   const [lensType, setLensType] = useState("");
@@ -427,7 +514,7 @@ export default function NewRxScreen() {
         gatRight, gatLeft,
         drugs: drugs.filter((d) => d.name.trim()),
         rightEyeDistance: reD, leftEyeDistance: leD,
-        rightEyeNear: reN, leftEyeNear: leN, ipd,
+        rightEyeNear: reN, leftEyeNear: leN, ipd, nearIPD, addValue,
         lensUsage, lensType, lensCoating, lensMaterial,
         advice, adviceBn, followUp, followUpBn,
       });
@@ -578,10 +665,13 @@ export default function NewRxScreen() {
 
         {/* ─── Spectacle Correction ─── */}
         <SectionTitle title="Spectacle Correction" />
-        <SpectacleTable reD={reD} leD={leD} reN={reN} leN={leN} ipd={ipd}
+        <SpectacleTable
+          reD={reD} leD={leD} reN={reN} leN={leN}
+          ipd={ipd} nearIPD={nearIPD} addValue={addValue}
           onChangeRxD={(eye, f, v) => { if (eye === "re") setReD((p) => ({ ...p, [f]: v })); else setLeD((p) => ({ ...p, [f]: v })); }}
           onChangeRxN={(eye, f, v) => { if (eye === "re") setReN((p) => ({ ...p, [f]: v })); else setLeN((p) => ({ ...p, [f]: v })); }}
           onChangeIPD={setIpd}
+          onChangeAdd={setAddValue}
         />
 
         {/* ─── Lens Options ─── */}
