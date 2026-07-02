@@ -6,11 +6,13 @@ import {
   Alert,
   FlatList,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { QRDisplay } from "@/components/QRDisplay";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PrescriptionCard } from "@/components/PrescriptionCard";
 import { useData } from "@/context/DataContext";
@@ -105,6 +107,18 @@ export default function PatientDetailScreen() {
                   </View>
                 ) : null}
               </View>
+
+              {/* PUID + QR */}
+              {patient.puid ? (
+                <View style={{ alignItems: "center", marginTop: 16, marginBottom: 4, padding: 14, backgroundColor: colors.secondary, borderRadius: 14, borderWidth: 1, borderColor: colors.border, width: "100%" }}>
+                  <QRDisplay value={patient.puid} size={90} />
+                  <View style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Feather name="hash" size={12} color={colors.primary} />
+                    <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary, letterSpacing: 1.5 }}>{patient.puid}</Text>
+                  </View>
+                  <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 3 }}>Scan on follow-up visit to auto-select patient</Text>
+                </View>
+              ) : null}
 
               <TouchableOpacity
                 style={s.newRxBtn}

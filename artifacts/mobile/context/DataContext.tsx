@@ -16,6 +16,13 @@ function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
+const PUID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generatePuid(): string {
+  let r = "OPT-";
+  for (let i = 0; i < 8; i++) r += PUID_CHARS[Math.floor(Math.random() * PUID_CHARS.length)];
+  return r;
+}
+
 interface DataContextValue {
   prescriptions: Prescription[];
   patients: Patient[];
@@ -28,6 +35,7 @@ interface DataContextValue {
   deletePatient: (id: string) => Promise<void>;
   updateDoctor: (d: Partial<DoctorProfile>) => Promise<void>;
   getPrescriptionsForPatient: (patientId: string) => Prescription[];
+  getPatientByPuid: (puid: string) => Patient | undefined;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -64,7 +72,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(DOCTOR_KEY),
         ]);
         if (rxRaw) setPrescriptions(JSON.parse(rxRaw));
-        if (pRaw) setPatients(JSON.parse(pRaw));
+        if (pRaw) {
+          // Migrate: assign puid to existing patients that don't have one
+          const loaded: Patient[] = JSON.parse(pRaw);
+          let dirty = false;
+          const migrated = loaded.map((p) => {
+            if (!p.puid) { dirty = true; return { ...p, puid: generatePuid() }; }
+            return p;
+          });
+          if (dirty) await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(migrated));
+          setPatients(migrated);
+        }
         if (dRaw) setDoctor({ ...DEFAULT_DOCTOR, ...JSON.parse(dRaw) });
       } catch {
       } finally {
@@ -104,6 +122,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const newP: Patient = {
         ...p,
         id: generateId(),
+        puid: p.puid || generatePuid(),
         createdAt: new Date().toISOString(),
       };
       setPatients((prev) => {
@@ -145,6 +164,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [prescriptions]
   );
 
+  const getPatientByPuid = useCallback(
+    (puid: string) => patients.find((p) => p.puid === puid),
+    [patients]
+  );
+
   return (
     <DataContext.Provider
       value={{
@@ -159,6 +183,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         deletePatient,
         updateDoctor,
         getPrescriptionsForPatient,
+        getPatientByPuid,
       }}
     >
       {children}

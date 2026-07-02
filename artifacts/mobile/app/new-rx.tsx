@@ -1,10 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Modal,
   Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -35,6 +38,8 @@ import {
   PastHistory,
   Patient,
 } from "@/types";
+
+const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 
 const EMPTY_VA: EyeVA = { ua: "", wa: "", ph: "", bcva: "" };
 const EMPTY_RX: EyeSpectacleRx = { dsp: "", dcyl: "", axis: "", va: "" };
@@ -399,8 +404,13 @@ function DrugRow({ drug, onChange, onDelete, drugSuggestions }: {
 export default function NewRxScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { patients, addPrescription, addPatient } = useData();
+  const { patients, prescriptions, addPrescription, addPatient, getPatientByPuid } = useData();
   const s = styles(colors);
+  const { duplicateFrom } = useLocalSearchParams<{ duplicateFrom?: string }>();
+
+  const [cameraPermission, requestPermission] = useCameraPermissions();
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanProcessed, setScanProcessed] = useState(false);
 
   const ccSugg = useSuggestions("chief_complaints");
   const adnexaSugg = useSuggestions("adnexa");
@@ -474,6 +484,61 @@ export default function NewRxScreen() {
     return patients.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
   }, [patients, patientQuery]);
 
+  // ── Duplicate Rx pre-fill ──
+  useEffect(() => {
+    if (!duplicateFrom) return;
+    const source = prescriptions.find((r) => r.id === duplicateFrom);
+    if (!source) return;
+    const patient = patients.find((p) => p.id === source.patientId);
+    if (patient) { setSelectedPatient(patient); setPatientQuery(patient.name); }
+    setPatientAge(source.patientAge);
+    setReVA(source.rightEyeVA); setLeVA(source.leftEyeVA);
+    setChiefComplaints(source.chiefComplaints);
+    setHistory(source.pastHistory);
+    setAdnexa(source.adnexa); setAnteriorSegment(source.anteriorSegment); setPosteriorSegment(source.posteriorSegment);
+    setGatRight(source.gatRight); setGatLeft(source.gatLeft);
+    setDrugs(source.drugs.length ? source.drugs.map((d) => ({ ...d, id: newId() })) : [emptyDrug()]);
+    setReD(source.rightEyeDistance); setLeD(source.leftEyeDistance);
+    setReN(source.rightEyeNear); setLeN(source.leftEyeNear);
+    setIpd(source.ipd); setAddValue(source.addValue || "");
+    setLensUsage(source.lensUsage); setLensType(source.lensType);
+    setLensCoating(source.lensCoating || []); setLensMaterial(source.lensMaterial);
+    setAdvice(source.advice); setAdviceBn(source.adviceBn);
+    setFollowUp(source.followUp); setFollowUpBn(source.followUpBn);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── QR scanner handler ──
+  const handleBarCodeScanned = useCallback(({ data }: { data: string }) => {
+    if (scanProcessed) return;
+    setScanProcessed(true);
+    const puid = data.trim().toUpperCase();
+    const found = getPatientByPuid(puid);
+    if (found) {
+      setSelectedPatient(found);
+      setPatientQuery(found.name);
+      setShowDropdown(false);
+      setShowScanner(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Alert.alert("Patient Not Found", `No patient with ID ${puid} found.`, [
+        { text: "OK", onPress: () => setScanProcessed(false) },
+      ]);
+    }
+  }, [scanProcessed, getPatientByPuid]);
+
+  const openScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert("Camera Access", "Camera permission is required to scan QR codes.");
+        return;
+      }
+    }
+    setScanProcessed(false);
+    setShowScanner(true);
+  };
+
   const updateDrug = (id: string, updated: Drug) =>
     setDrugs((ds) => ds.map((d) => (d.id === id ? updated : d)));
   const removeDrug = (id: string) =>
@@ -531,11 +596,40 @@ export default function NewRxScreen() {
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
+
+      {/* ─── QR Scanner Modal ─── */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={{ flex: 1, backgroundColor: "#000" }}>
+          <StatusBar barStyle="light-content" backgroundColor="#000" />
+          <CameraView
+            style={{ flex: 1 }}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            onBarcodeScanned={scanProcessed ? undefined : handleBarCodeScanned}
+          />
+          {/* Overlay frame */}
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", pointerEvents: "none" }}>
+            <View style={{ width: 220, height: 220, borderWidth: 3, borderColor: "#fff", borderRadius: 16, opacity: 0.85 }} />
+            <Text style={{ color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14, marginTop: 20, textAlign: "center", textShadowColor: "#000", textShadowRadius: 4 }}>
+              Point at a patient QR code
+            </Text>
+          </View>
+          <View style={{ position: "absolute", top: (Platform.OS === "web" ? 20 : insets.top) + 8, left: 16 }}>
+            <TouchableOpacity
+              style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" }}
+              onPress={() => setShowScanner(false)}
+            >
+              <Feather name="x" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={s.navBar}>
         <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
           <Feather name="x" size={20} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={s.navTitle}>New Prescription</Text>
+        <Text style={s.navTitle}>{duplicateFrom ? "Duplicate Rx" : "New Prescription"}</Text>
         <TouchableOpacity style={[s.saveBtn, saving && s.saveBtnDisabled]} onPress={handleSave} disabled={saving}>
           <Text style={s.saveBtnText}>{saving ? "Saving…" : "Save Rx"}</Text>
         </TouchableOpacity>
@@ -558,7 +652,17 @@ export default function NewRxScreen() {
                 onFocus={() => setShowDropdown(true)}
                 placeholder="Search patient by name…" placeholderTextColor={colors.mutedForeground}
               />
-              {selectedPatient && <Feather name="check-circle" size={16} color={colors.success} />}
+              {selectedPatient
+                ? <Feather name="check-circle" size={16} color={colors.success} />
+                : (
+                  <TouchableOpacity
+                    onPress={openScanner}
+                    style={{ marginLeft: 6, width: 32, height: 32, borderRadius: 8, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border }}
+                  >
+                    <Feather name="maximize" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+                )
+              }
             </View>
             {showDropdown && !selectedPatient && (
               <View style={s.dropdown}>

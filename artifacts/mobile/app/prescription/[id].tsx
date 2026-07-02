@@ -20,6 +20,8 @@ import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
 import { generateFullPrintHTML, generateRxPadHTML } from "@/utils/generatePrescriptionHTML";
+import { QRDisplay } from "@/components/QRDisplay";
+import QRCodeLib from "qrcode";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
@@ -184,7 +186,7 @@ export default function PrescriptionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { prescriptions, deletePrescription, doctor } = useData();
+  const { prescriptions, patients, deletePrescription, doctor } = useData();
   const s = styles(colors);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -192,13 +194,26 @@ export default function PrescriptionDetailScreen() {
   const rx = prescriptions.find((r) => r.id === id);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
+  const patient = patients.find((p) => p.id === rx?.patientId);
+
+  const handleDuplicate = () => {
+    if (!rx) return;
+    router.push(`/new-rx?duplicateFrom=${rx.id}`);
+  };
+
   const handlePrint = async (mode: "full" | "pad") => {
     if (!rx) return;
     setShowPrintModal(false);
     setPrinting(true);
     try {
+      let qrSvg: string | undefined;
+      if (mode === "full" && patient?.puid) {
+        try {
+          qrSvg = await QRCodeLib.toString(patient.puid, { type: "svg", width: 60, margin: 1, color: { dark: "#0D1B2A", light: "#ffffff" } });
+        } catch { /* skip QR if fails */ }
+      }
       const html = mode === "full"
-        ? generateFullPrintHTML(rx, doctor)
+        ? generateFullPrintHTML(rx, doctor, qrSvg)
         : generateRxPadHTML(rx);
       if (Platform.OS === "web") {
         const win = window.open("", "_blank");
@@ -292,6 +307,9 @@ export default function PrescriptionDetailScreen() {
         </TouchableOpacity>
         <Text style={s.navTitle} numberOfLines={1}>{rx.patientName}</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity style={s.iconBtn} onPress={handleDuplicate}>
+            <Feather name="copy" size={17} color={colors.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={[s.iconBtn, printing && { opacity: 0.5 }]} onPress={() => setShowPrintModal(true)} disabled={printing}>
             <Feather name={printing ? "loader" : "printer"} size={17} color={colors.primary} />
           </TouchableOpacity>

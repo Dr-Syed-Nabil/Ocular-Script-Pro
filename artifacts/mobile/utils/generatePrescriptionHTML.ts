@@ -77,7 +77,7 @@ function historyBadges(h: PastHistory): string {
 }
 
 /* ── FULL PRINT template ── */
-export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile): string {
+export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, qrSvg?: string): string {
   const lensOpts = [rx.lensUsage, rx.lensType, ...(rx.lensCoating || []), rx.lensMaterial].filter(Boolean);
   return `<!DOCTYPE html>
 <html lang="bn">
@@ -204,6 +204,7 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile): 
       <div class="patient-name">${esc(rx.patientName)}${rx.patientAge ? ` &nbsp;·&nbsp; Age: ${esc(rx.patientAge)}` : ""}</div>
       <div class="patient-meta">Date: ${formatDate(rx.date)}</div>
     </div>
+    ${qrSvg ? `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">${qrSvg}<div style="font-size:8px;color:#8A9BB0;font-weight:600;letter-spacing:0.8px">PATIENT ID</div></div>` : ""}
   </div>
 
   <!-- Chief Complaints -->

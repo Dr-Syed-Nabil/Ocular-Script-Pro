@@ -80,6 +80,7 @@ export interface Prescription {
 
 export interface Patient {
   id: string;
+  puid: string;
   name: string;
   dob: string;
   phone: string;
