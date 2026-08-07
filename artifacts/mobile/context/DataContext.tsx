@@ -16,8 +16,31 @@ function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
+/**
+ * Build a structured PUID:  {INITIALS}{AGE2d}Y{DDMMYY}{SERIAL3d}
+ * e.g. Rashedul Islam, 41 yrs, 1 Aug 2026, 7th patient of the day → RI41Y070826007
+ */
+function buildPuid(name: string, ageStr: string, enrollDate: Date, serial: number): string {
+  const parts = name.trim().split(/\s+/);
+  let initials: string;
+  if (parts.length >= 2) {
+    initials = (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  } else {
+    initials = parts[0].substring(0, 2).toUpperCase().padEnd(2, "X");
+  }
+  // Extract numeric age (handles "41", "41 yrs", "41Y", etc.)
+  const ageNum = parseInt(ageStr.replace(/[^0-9]/g, ""), 10) || 0;
+  const age2 = String(ageNum).padStart(2, "0").slice(-2);
+  const dd = String(enrollDate.getDate()).padStart(2, "0");
+  const mm = String(enrollDate.getMonth() + 1).padStart(2, "0");
+  const yy = String(enrollDate.getFullYear()).slice(-2);
+  const ser3 = String(serial).padStart(3, "0").slice(-3);
+  return `${initials}${age2}Y${dd}${mm}${yy}${ser3}`;
+}
+
+// Legacy random PUID for migration of pre-existing patients
 const PUID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-function generatePuid(): string {
+function generateLegacyPuid(): string {
   let r = "OPT-";
   for (let i = 0; i < 8; i++) r += PUID_CHARS[Math.floor(Math.random() * PUID_CHARS.length)];
   return r;
@@ -77,7 +100,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           const loaded: Patient[] = JSON.parse(pRaw);
           let dirty = false;
           const migrated = loaded.map((p) => {
-            if (!p.puid) { dirty = true; return { ...p, puid: generatePuid() }; }
+            if (!p.puid) { dirty = true; return { ...p, puid: generateLegacyPuid() }; }
             return p;
           });
           if (dirty) await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(migrated));
@@ -119,10 +142,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addPatient = useCallback(
     async (p: Omit<Patient, "id" | "createdAt">): Promise<Patient> => {
+      // Compute structured PUID unless caller already provided one
+      let puid = p.puid;
+      if (!puid) {
+        const enrollDate = new Date();
+        // Count patients enrolled today to get the next daily serial
+        const todayPrefix = enrollDate.toISOString().slice(0, 10); // "YYYY-MM-DD"
+        let serial = 1;
+        setPatients((prev) => {
+          serial = prev.filter((pt) => pt.createdAt.startsWith(todayPrefix)).length + 1;
+          return prev; // no change — we're just reading
+        });
+        puid = buildPuid(p.name, p.ageAtEnrollment || "", enrollDate, serial);
+      }
       const newP: Patient = {
         ...p,
         id: generateId(),
-        puid: p.puid || generatePuid(),
+        puid,
         createdAt: new Date().toISOString(),
       };
       setPatients((prev) => {

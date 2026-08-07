@@ -558,7 +558,7 @@ export default function NewRxScreen() {
     try {
       let patient = selectedPatient;
       if (isNewPatient) {
-        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: newPatientPhone.trim(), email: "", gender: "" });
+        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: newPatientPhone.trim(), email: "", gender: "", ageAtEnrollment: patientAge.trim() });
       }
       if (!patient) return;
 

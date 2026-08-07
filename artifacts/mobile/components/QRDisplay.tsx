@@ -7,10 +7,17 @@ interface QRDisplayProps {
   value: string;
   size?: number;
   label?: string;
+  /** Visit label shown below the PUID, e.g. "V1NEW" or "V2F/U" */
+  visitLabel?: string;
 }
 
-export function QRDisplay({ value, size = 100, label }: QRDisplayProps) {
+export function QRDisplay({ value, size = 100, label, visitLabel }: QRDisplayProps) {
   const colors = useColors();
+
+  // Style visit label differently for NEW vs F/U
+  const isNew = visitLabel && !visitLabel.includes("F/U");
+  const visitColor = isNew ? colors.success : colors.primary;
+
   return (
     <View style={{ alignItems: "center", gap: 6 }}>
       <View style={{
@@ -41,6 +48,36 @@ export function QRDisplay({ value, size = 100, label }: QRDisplayProps) {
           letterSpacing: 1.2,
           textTransform: "uppercase",
         }}>{label}</Text>
+      ) : null}
+      {visitLabel ? (
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 5,
+          backgroundColor: isNew
+            ? (colors.success + "18")
+            : (colors.primary + "15"),
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: 20,
+          borderWidth: 1,
+          borderColor: visitColor + "40",
+        }}>
+          <Text style={{
+            fontSize: 12,
+            fontFamily: "Inter_700Bold",
+            color: visitColor,
+            letterSpacing: 0.8,
+          }}>{visitLabel}</Text>
+          <Text style={{
+            fontSize: 10,
+            fontFamily: "Inter_400Regular",
+            color: visitColor,
+            opacity: 0.85,
+          }}>
+            {visitLabel.includes("F/U") ? "Follow-up" : "New Visit"}
+          </Text>
+        </View>
       ) : null}
     </View>
   );

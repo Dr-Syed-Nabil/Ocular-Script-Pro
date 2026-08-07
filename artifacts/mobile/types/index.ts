@@ -80,12 +80,15 @@ export interface Prescription {
 
 export interface Patient {
   id: string;
-  puid: string;
+  /** Generated on enrollment; always set after creation */
+  puid?: string;
   name: string;
   dob: string;
   phone: string;
   email: string;
   gender: "Male" | "Female" | "Other" | "";
+  /** Age string at enrollment, e.g. "41 yrs" — used to build the PUID */
+  ageAtEnrollment?: string;
   createdAt: string;
 }
 
