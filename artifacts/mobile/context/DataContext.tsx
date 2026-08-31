@@ -146,13 +146,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       let puid = p.puid;
       if (!puid) {
         const enrollDate = new Date();
-        // Count patients enrolled today to get the next daily serial
+        // Count patients enrolled today to get the next daily serial.
+        // Read from the current render instead of a state setter: setters are
+        // asynchronous and cannot be used as a synchronous read.
         const todayPrefix = enrollDate.toISOString().slice(0, 10); // "YYYY-MM-DD"
-        let serial = 1;
-        setPatients((prev) => {
-          serial = prev.filter((pt) => pt.createdAt.startsWith(todayPrefix)).length + 1;
-          return prev; // no change — we're just reading
-        });
+        const serial = patients.filter((pt) => pt.createdAt.startsWith(todayPrefix)).length + 1;
         puid = buildPuid(p.name, p.ageAtEnrollment || "", enrollDate, serial);
       }
       const newP: Patient = {
@@ -168,7 +166,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       return newP;
     },
-    []
+    [patients]
   );
 
   const updatePatient = useCallback(async (id: string, p: Partial<Patient>) => {

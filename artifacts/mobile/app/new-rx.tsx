@@ -33,6 +33,8 @@ import {
 } from "@/utils/banglaTranslate";
 import {
   Drug,
+  ChiefComplaintSelection,
+  ComplaintLaterality,
   EyeSpectacleRx,
   EyeVA,
   PastHistory,
@@ -48,6 +50,38 @@ const EMPTY_HISTORY: PastHistory = {
   ba: false, thyDs: false, uromax: false, others: "",
 };
 const DRUG_ROUTES = ["Eye Drops", "Eye Ointment", "Oral", "Injection", "Topical"];
+const CHIEF_COMPLAINTS = [
+  "Blurred vision",
+  "Diminution of vision",
+  "Pain",
+  "Redness",
+  "Watering",
+  "Itching",
+  "Photophobia",
+  "Discharge",
+  "Foreign body sensation",
+  "Dryness",
+  "Floaters",
+  "Flashes",
+  "Double vision",
+  "Distortion of vision",
+  "Difficulty seeing near",
+  "Difficulty seeing at distance",
+  "Eye strain",
+  "Headache",
+  "Swelling",
+  "Trauma",
+  "Glare / haloes",
+] as const;
+const LATERALITIES: ComplaintLaterality[] = ["R", "L", "B"];
+
+function formatChiefComplaints(selections: ChiefComplaintSelection[], freeText: string): string {
+  const selected = selections.map(({ complaint, laterality }) =>
+    complaint === "Headache" ? complaint : `${complaint} (${laterality ?? "?"})`,
+  );
+  const custom = freeText.trim();
+  return [...selected, ...(custom ? [custom] : [])].join(", ");
+}
 
 function genDrugId() {
   return Math.random().toString(36).slice(2);
@@ -431,6 +465,9 @@ export default function NewRxScreen() {
   const [leVA, setLeVA] = useState<EyeVA>(EMPTY_VA);
 
   const [chiefComplaints, setChiefComplaints] = useState("");
+  const [chiefComplaintSelections, setChiefComplaintSelections] = useState<ChiefComplaintSelection[]>([]);
+  const [customComplaint, setCustomComplaint] = useState("");
+  const [showComplaintPicker, setShowComplaintPicker] = useState(false);
   const [history, setHistory] = useState<PastHistory>(EMPTY_HISTORY);
 
   const [adnexa, setAdnexa] = useState("");
@@ -494,6 +531,8 @@ export default function NewRxScreen() {
     setPatientAge(source.patientAge);
     setReVA(source.rightEyeVA); setLeVA(source.leftEyeVA);
     setChiefComplaints(source.chiefComplaints);
+    setChiefComplaintSelections(source.chiefComplaintSelections || []);
+    setCustomComplaint(source.chiefComplaintSelections ? "" : source.chiefComplaints);
     setHistory(source.pastHistory);
     setAdnexa(source.adnexa); setAnteriorSegment(source.anteriorSegment); setPosteriorSegment(source.posteriorSegment);
     setGatRight(source.gatRight); setGatLeft(source.gatLeft);
@@ -554,6 +593,17 @@ export default function NewRxScreen() {
       Alert.alert("Missing Name", "Please enter the patient name.");
       return;
     }
+    const incompleteComplaint = chiefComplaintSelections.find(
+      (selection) => selection.complaint !== "Headache" && !selection.laterality,
+    );
+    if (incompleteComplaint) {
+      setShowComplaintPicker(true);
+      Alert.alert(
+        "Select an eye side",
+        `Choose R, L, or B for ${incompleteComplaint.complaint}.`,
+      );
+      return;
+    }
     setSaving(true);
     try {
       let patient = selectedPatient;
@@ -574,7 +624,7 @@ export default function NewRxScreen() {
         patientId: patient.id, patientName: patient.name, patientAge,
         date: new Date().toISOString().split("T")[0],
         rightEyeVA: reVA, leftEyeVA: leVA,
-        chiefComplaints, pastHistory: history,
+         chiefComplaints, chiefComplaintSelections, pastHistory: history,
         adnexa, anteriorSegment, posteriorSegment,
         gatRight, gatLeft,
         drugs: drugs.filter((d) => d.name.trim()),
@@ -620,6 +670,93 @@ export default function NewRxScreen() {
               onPress={() => setShowScanner(false)}
             >
               <Feather name="x" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Chief complaints picker ─── */}
+      <Modal
+        visible={showComplaintPicker}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowComplaintPicker(false)}
+      >
+        <View style={s.modalBackdrop}>
+          <View style={s.complaintModal}>
+            <View style={s.modalHeader}>
+              <View>
+                <Text style={s.modalTitle}>Chief Complaints</Text>
+                <Text style={s.modalSub}>Select symptoms and the affected eye</Text>
+              </View>
+              <TouchableOpacity style={s.modalClose} onPress={() => setShowComplaintPicker(false)}>
+                <Feather name="x" size={19} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <KeyboardAwareScrollView
+              contentContainerStyle={{ paddingBottom: 12 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {CHIEF_COMPLAINTS.map((complaint) => {
+                const selection = chiefComplaintSelections.find((item) => item.complaint === complaint);
+                const selected = Boolean(selection);
+                return (
+                  <View key={complaint} style={[s.complaintRow, selected && s.complaintRowSelected]}>
+                    <TouchableOpacity
+                      style={s.complaintNameButton}
+                      onPress={() => {
+                        setChiefComplaintSelections((current) => selected
+                          ? current.filter((item) => item.complaint !== complaint)
+                          : [...current, { complaint }]);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[s.checkbox, selected && s.checkboxSelected]}>
+                        {selected && <Feather name="check" size={12} color="#fff" />}
+                      </View>
+                      <Text style={[s.complaintName, selected && s.complaintNameSelected]}>{complaint}</Text>
+                    </TouchableOpacity>
+                    {selected && complaint !== "Headache" && (
+                      <View style={s.lateralityGroup}>
+                        {LATERALITIES.map((side) => (
+                          <TouchableOpacity
+                            key={side}
+                            style={[s.lateralityButton, selection?.laterality === side && s.lateralityButtonSelected]}
+                            onPress={() => setChiefComplaintSelections((current) => current.map((item) =>
+                              item.complaint === complaint ? { ...item, laterality: side } : item,
+                            ))}
+                          >
+                            <Text style={[s.lateralityText, selection?.laterality === side && s.lateralityTextSelected]}>
+                              {side}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+              <View style={s.customComplaintBlock}>
+                <MiniLabel label="Other complaint" />
+                <TextInput
+                  style={[s.input, { minHeight: 64, textAlignVertical: "top" }]}
+                  value={customComplaint}
+                  onChangeText={setCustomComplaint}
+                  placeholder="Type another complaint…"
+                  placeholderTextColor={colors.mutedForeground}
+                  multiline
+                />
+              </View>
+            </KeyboardAwareScrollView>
+            <TouchableOpacity
+              style={s.doneButton}
+              onPress={() => {
+                setChiefComplaints(formatChiefComplaints(chiefComplaintSelections, customComplaint));
+                setShowComplaintPicker(false);
+              }}
+            >
+              <Text style={s.doneButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -707,8 +844,16 @@ export default function NewRxScreen() {
 
         {/* ─── Chief Complaints ─── */}
         <SectionTitle title="Chief Complaints" />
-        <SmartInput fieldKey="chief_complaints" value={chiefComplaints} onChangeText={setChiefComplaints}
-          placeholder="e.g. Blurred vision, headache, eye pain…" minHeight={80} multiline />
+        <TouchableOpacity
+          style={s.complaintField}
+          onPress={() => setShowComplaintPicker(true)}
+          activeOpacity={0.75}
+        >
+          <Text style={chiefComplaints ? s.complaintFieldText : s.complaintFieldPlaceholder}>
+            {chiefComplaints || "Tap to select symptoms…"}
+          </Text>
+          <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
 
         {/* ─── Past History ─── */}
         <SectionTitle title="Past History" />
@@ -854,6 +999,30 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     row: { flexDirection: "row", marginTop: 10 },
     input: { backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, color: colors.foreground, fontFamily: "Inter_400Regular", borderWidth: 1.5, borderColor: colors.border },
     checkGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    complaintField: { minHeight: 80, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 12, borderWidth: 1.5, borderColor: colors.border, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
+    complaintFieldText: { flex: 1, fontSize: 14, lineHeight: 21, color: colors.foreground, fontFamily: "Inter_400Regular", paddingRight: 8 },
+    complaintFieldPlaceholder: { flex: 1, fontSize: 14, color: colors.mutedForeground, fontFamily: "Inter_400Regular", paddingRight: 8 },
+    modalBackdrop: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.45)", justifyContent: "flex-end" },
+    complaintModal: { maxHeight: "88%", backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 18, paddingBottom: 14 },
+    modalHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 },
+    modalTitle: { fontSize: 19, color: colors.foreground, fontFamily: "Inter_700Bold" },
+    modalSub: { fontSize: 12, color: colors.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 3 },
+    modalClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.muted, alignItems: "center", justifyContent: "center" },
+    complaintRow: { minHeight: 48, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    complaintRowSelected: { backgroundColor: colors.secondary, borderRadius: 10, borderBottomWidth: 0, paddingHorizontal: 8, marginBottom: 2 },
+    complaintNameButton: { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 10 },
+    checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: colors.mutedForeground, marginRight: 10, alignItems: "center", justifyContent: "center" },
+    checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+    complaintName: { flex: 1, fontSize: 13, color: colors.foreground, fontFamily: "Inter_400Regular" },
+    complaintNameSelected: { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+    lateralityGroup: { flexDirection: "row", gap: 4, marginLeft: 6 },
+    lateralityButton: { width: 31, height: 29, borderRadius: 7, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", backgroundColor: colors.card },
+    lateralityButtonSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+    lateralityText: { fontSize: 11, color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
+    lateralityTextSelected: { color: "#fff" },
+    customComplaintBlock: { paddingTop: 14 },
+    doneButton: { marginTop: 10, borderRadius: 13, backgroundColor: colors.primary, alignItems: "center", paddingVertical: 14 },
+    doneButtonText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
     addDrugBtn: { flexDirection: "row", alignItems: "center", backgroundColor: colors.secondary, borderRadius: 10, padding: 12, borderWidth: 1.5, borderColor: colors.primary + "40", justifyContent: "center" },
     bnBtn: { marginTop: 6, paddingVertical: 4 },
     bnBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.accent },

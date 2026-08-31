@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router = Router();
+router.use(requireAuth);
 
 router.post("/api/translate", async (req, res) => {
   const { text, context } = req.body as { text?: string; context?: string };

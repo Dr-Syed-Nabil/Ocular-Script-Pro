@@ -34,6 +34,13 @@ export interface Drug {
   notes: string;
 }
 
+export type ComplaintLaterality = "R" | "L" | "B";
+
+export interface ChiefComplaintSelection {
+  complaint: string;
+  laterality?: ComplaintLaterality;
+}
+
 export interface Prescription {
   id: string;
   patientId: string;
@@ -45,6 +52,7 @@ export interface Prescription {
   leftEyeVA: EyeVA;
 
   chiefComplaints: string;
+  chiefComplaintSelections?: ChiefComplaintSelection[];
   pastHistory: PastHistory;
 
   adnexa: string;
