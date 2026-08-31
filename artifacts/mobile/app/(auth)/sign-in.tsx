@@ -3,7 +3,7 @@ import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { AuthShell, authStyles } from "@/components/AuthShell";
 import { useColors } from "@/hooks/useColors";
 
@@ -11,6 +11,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 function useWarmUpBrowser() {
   useEffect(() => {
+    if (Platform.OS !== "android") return;
     void WebBrowser.warmUpAsync();
     return () => { void WebBrowser.coolDownAsync(); };
   }, []);
@@ -104,7 +105,7 @@ export default function SignInScreen() {
       </Pressable>
       <View style={s.footer}>
         <Text style={s.footerText}>New to OptiScript? </Text>
-        <Link href={"/(auth)/sign-up" as never}><Text style={s.footerLink}>Create an account</Text></Link>
+        <Link href={"/sign-up" as never}><Text style={s.footerLink}>Create an account</Text></Link>
       </View>
     </AuthShell>
   );

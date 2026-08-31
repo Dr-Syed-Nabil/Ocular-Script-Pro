@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack, usePathname, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { ClerkLoaded, ClerkProvider, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
@@ -27,48 +27,27 @@ const clerkProxyUrl = process.env.EXPO_PUBLIC_CLERK_PROXY_URL || undefined;
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
 if (domain) setBaseUrl(`https://${domain}`);
 
-function AuthenticatedRouteGuard() {
+function RootLayoutNav() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
-  const pathname = usePathname();
-  const router = useRouter();
-  const inAuthGroup = pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
 
   useEffect(() => {
     setAuthTokenGetter(() => getToken());
     return () => setAuthTokenGetter(null);
   }, [getToken]);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn && !inAuthGroup) {
-      router.replace("/(auth)/sign-in" as never);
-    } else if (isSignedIn && inAuthGroup) {
-      router.replace("/");
-    }
-  }, [inAuthGroup, isLoaded, isSignedIn, router]);
-
   if (!isLoaded) return null;
-  if (!isSignedIn && !inAuthGroup) return <Redirect href={"/(auth)/sign-in" as never} />;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="new-rx"
-        options={{
-          headerShown: false,
-          presentation: "modal",
-        }}
-      />
-      <Stack.Screen
-        name="prescription/[id]"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="patient/[id]"
-        options={{ headerShown: false }}
-      />
+      <Stack.Protected guard={!isSignedIn}>
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={Boolean(isSignedIn)}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="new-rx" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="prescription/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="patient/[id]" options={{ headerShown: false }} />
+      </Stack.Protected>
     </Stack>
   );
 }
@@ -106,7 +85,7 @@ export default function RootLayout() {
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider>
                   <DataProvider>
-                    <AuthenticatedRouteGuard />
+                    <RootLayoutNav />
                   </DataProvider>
                 </KeyboardProvider>
               </GestureHandlerRootView>

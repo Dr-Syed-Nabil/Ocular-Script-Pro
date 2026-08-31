@@ -81,7 +81,7 @@ export default function SignUpScreen() {
       )}
       <View style={s.footer}>
         <Text style={s.footerText}>Already have an account? </Text>
-        <Link href={"/(auth)/sign-in" as never}><Text style={s.footerLink}>Sign in</Text></Link>
+        <Link href={"/sign-in" as never}><Text style={s.footerLink}>Sign in</Text></Link>
       </View>
       <View nativeID="clerk-captcha" />
     </AuthShell>

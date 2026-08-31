@@ -1,0 +1,1 @@
+- [Expo Metro image-size compatibility](expo-metro-image-size.md) — do not globally force image-size 2.x; Metro 0.83 expects its 1.x API.
