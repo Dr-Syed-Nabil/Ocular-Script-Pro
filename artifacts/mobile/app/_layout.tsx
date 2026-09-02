@@ -45,6 +45,7 @@ function RootLayoutNav() {
       <Stack.Protected guard={Boolean(isSignedIn)}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="new-rx" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="change-password" options={{ headerShown: false }} />
         <Stack.Screen name="prescription/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="patient/[id]" options={{ headerShown: false }} />
       </Stack.Protected>

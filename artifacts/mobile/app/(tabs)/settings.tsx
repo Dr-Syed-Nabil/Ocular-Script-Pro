@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useClerk, useUser } from "@clerk/expo";
+import { useRouter } from "expo-router";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -58,6 +59,7 @@ export default function SettingsScreen() {
   const { doctor, updateDoctor } = useData();
   const { signOut } = useClerk();
   const { user } = useUser();
+  const router = useRouter();
   const s = styles(colors);
 
   const [form, setForm] = useState({ ...doctor });
@@ -150,6 +152,10 @@ export default function SettingsScreen() {
           <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: colors.foreground, marginBottom: 12 }}>
             {user?.primaryEmailAddress?.emailAddress || "Signed-in OptiScript account"}
           </Text>
+          <TouchableOpacity style={s.changePasswordBtn} onPress={() => router.push("/change-password")} activeOpacity={0.85}>
+            <Feather name="lock" size={17} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={s.changePasswordText}>{user?.passwordEnabled ? "Change password" : "Set a password"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={s.signOutBtn} onPress={() => signOut()}>
             <Feather name="log-out" size={17} color={colors.destructive} style={{ marginRight: 8 }} />
             <Text style={s.signOutText}>Sign out</Text>
@@ -182,4 +188,6 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 18 },
     signOutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.destructive + "50", borderRadius: 11, paddingVertical: 12 },
     signOutText: { color: colors.destructive, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+    changePasswordBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.primary + "50", borderRadius: 11, paddingVertical: 12, marginBottom: 10 },
+    changePasswordText: { color: colors.primary, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   });

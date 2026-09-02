@@ -92,6 +92,11 @@ export default function SignInScreen() {
         placeholder="Your password"
         placeholderTextColor={colors.mutedForeground}
       />
+      <Link href="/forgot-password" asChild>
+        <Pressable style={{ alignSelf: "flex-end", marginTop: -5, marginBottom: 10 }}>
+          <Text style={s.footerLink}>Forgot password?</Text>
+        </Pressable>
+      </Link>
       <Pressable
         style={({ pressed }) => [s.button, (!emailAddress || !password || loading) && s.buttonDisabled, pressed && { opacity: 0.85 }]}
         onPress={handleSubmit}
