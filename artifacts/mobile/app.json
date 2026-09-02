@@ -28,7 +28,13 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "@clerk/expo",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to use Face ID for secure OptiScript sign-in."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

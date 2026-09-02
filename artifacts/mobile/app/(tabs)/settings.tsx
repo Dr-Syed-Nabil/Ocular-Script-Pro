@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useClerk, useUser } from "@clerk/expo";
+import { useBiometricCredentials, useClerk, useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
@@ -59,13 +59,56 @@ export default function SettingsScreen() {
   const { doctor, updateDoctor } = useData();
   const { signOut } = useClerk();
   const { user } = useUser();
+  const { getAvailability, list, enroll, revoke } = useBiometricCredentials();
   const router = useRouter();
   const s = styles(colors);
 
   const [form, setForm] = useState({ ...doctor });
   const [saved, setSaved] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricCredentialId, setBiometricCredentialId] = useState<string | null>(null);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricMessage, setBiometricMessage] = useState("");
 
   useEffect(() => { setForm({ ...doctor }); }, [doctor]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (Platform.OS === "web") return () => { mounted = false; };
+    void Promise.all([getAvailability(), list()]).then(([availability, credentials]) => {
+      if (!mounted) return;
+      setBiometricAvailable(availability.isAvailable);
+      setBiometricCredentialId(credentials.find((credential) => credential.status === "active")?.id ?? null);
+    }).catch(() => {
+      if (mounted) setBiometricAvailable(false);
+    });
+    return () => { mounted = false; };
+  }, [getAvailability, list]);
+
+  const handleBiometricToggle = async () => {
+    setBiometricMessage("");
+    setBiometricBusy(true);
+    try {
+      if (biometricCredentialId) {
+        await revoke(biometricCredentialId);
+        setBiometricCredentialId(null);
+        setBiometricMessage("Biometric sign-in has been turned off on this device.");
+      } else {
+        const credential = await enroll({
+          name: "OptiScript on this device",
+          identifierHint: user?.primaryEmailAddress?.emailAddress,
+          reason: "Protect your OptiScript account with biometrics",
+          policy: "biometry_or_device_passcode",
+        });
+        setBiometricCredentialId(credential.id);
+        setBiometricMessage("Biometric sign-in is ready on this device.");
+      }
+    } catch (error) {
+      setBiometricMessage(error instanceof Error ? error.message : "Biometric setup was not completed.");
+    } finally {
+      setBiometricBusy(false);
+    }
+  };
 
   const set = (key: keyof typeof form) => (v: string) =>
     setForm((f) => ({ ...f, [key]: v }));
@@ -161,6 +204,34 @@ export default function SettingsScreen() {
             <Text style={s.signOutText}>Sign out</Text>
           </TouchableOpacity>
         </FieldGroup>
+        {biometricAvailable ? (
+          <FieldGroup title="Security">
+            <View style={s.securityRow}>
+              <View style={s.securityIcon}>
+                <Feather name="shield" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
+                  Biometric sign-in
+                </Text>
+                <Text style={{ fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 }}>
+                  {biometricCredentialId ? "Use fingerprint or Face ID for secure sign-in." : "Unlock OptiScript quickly with fingerprint or Face ID."}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[s.securityToggle, biometricCredentialId ? s.securityToggleOn : null, biometricBusy && { opacity: 0.55 }]}
+                onPress={handleBiometricToggle}
+                disabled={biometricBusy}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.securityToggleText, biometricCredentialId ? s.securityToggleTextOn : null]}>
+                  {biometricBusy ? "..." : biometricCredentialId ? "On" : "Off"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {biometricMessage ? <Text style={s.securityMessage}>{biometricMessage}</Text> : null}
+          </FieldGroup>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -190,4 +261,11 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     signOutText: { color: colors.destructive, fontSize: 14, fontFamily: "Inter_600SemiBold" },
     changePasswordBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.primary + "50", borderRadius: 11, paddingVertical: 12, marginBottom: 10 },
     changePasswordText: { color: colors.primary, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+    securityRow: { flexDirection: "row", alignItems: "center" },
+    securityIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: colors.secondary, marginRight: 10 },
+    securityToggle: { minWidth: 48, borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingVertical: 7, paddingHorizontal: 10, alignItems: "center" },
+    securityToggleOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+    securityToggleText: { color: colors.mutedForeground, fontSize: 12, fontFamily: "Inter_700Bold" },
+    securityToggleTextOn: { color: "#fff" },
+    securityMessage: { color: colors.primary, fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 12 },
   });
