@@ -64,7 +64,7 @@ function LabelValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function VASection({ reVA, leVA }: { reVA: EyeVA; leVA: EyeVA }) {
+function VASection({ reVA, leVA, title = "Visual Acuity" }: { reVA: EyeVA; leVA: EyeVA; title?: string }) {
   const colors = useColors();
   const hasData = reVA.ua || reVA.wa || reVA.ph || reVA.bcva || leVA.ua || leVA.wa || leVA.ph || leVA.bcva;
   if (!hasData) return null;
@@ -73,7 +73,7 @@ function VASection({ reVA, leVA }: { reVA: EyeVA; leVA: EyeVA }) {
     { key: "ph", label: "PH" }, { key: "bcva", label: "BCVA" },
   ];
   return (
-    <SectionBlock title="Visual Acuity">
+    <SectionBlock title={title}>
       <InfoCard>
         <View style={{ flexDirection: "row", marginBottom: 8 }}>
           <View style={{ width: 52 }} />
@@ -102,8 +102,8 @@ function RxTable({ reD, leD, reN, leN, ipd }: {
   ipd: string;
 }) {
   const colors = useColors();
-  const hasDist = reD.dsp || reD.dcyl || leD.dsp || leD.dcyl;
-  const hasNear = reN.dsp || reN.dcyl || leN.dsp || leN.dcyl;
+  const hasDist = reD.dsp || reD.dcyl || reD.va || leD.dsp || leD.dcyl || leD.va;
+  const hasNear = reN.dsp || reN.dcyl || reN.va || leN.dsp || leN.dcyl || leN.va;
   if (!hasDist && !hasNear && !ipd) return null;
 
   const RxRow = ({ eye, rx, label }: { eye: string; rx: EyeSpectacleRx; label: string }) => {
@@ -186,7 +186,7 @@ export default function PrescriptionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { prescriptions, patients, deletePrescription, doctor } = useData();
+  const { prescriptions, patients, deletePrescription, doctor, prescriptionConfig } = useData();
   const s = styles(colors);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -199,6 +199,11 @@ export default function PrescriptionDetailScreen() {
   const handleDuplicate = () => {
     if (!rx) return;
     router.push(`/new-rx?duplicateFrom=${rx.id}`);
+  };
+
+  const handleEdit = () => {
+    if (!rx) return;
+    router.push(`/new-rx?editId=${rx.id}`);
   };
 
   const handlePrint = async (mode: "full" | "pad") => {
@@ -262,6 +267,12 @@ export default function PrescriptionDetailScreen() {
   };
 
   const lensOpts = [rx.lensUsage, rx.lensType, ...(rx.lensCoating || []), rx.lensMaterial].filter(Boolean);
+  const sectionTitle = (id: string, fallback: string) =>
+    rx.sectionTitles?.[id] || prescriptionConfig.sections.find((section) => section.id === id)?.title || fallback;
+  const sectionEnabled = (id: string) =>
+    id === "patient" || (rx.hiddenSections
+      ? !rx.hiddenSections.includes(id)
+      : prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false);
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
@@ -310,6 +321,9 @@ export default function PrescriptionDetailScreen() {
           <TouchableOpacity style={s.iconBtn} onPress={handleDuplicate}>
             <Feather name="copy" size={17} color={colors.primary} />
           </TouchableOpacity>
+          <TouchableOpacity style={s.iconBtn} onPress={handleEdit}>
+            <Feather name="edit-2" size={17} color={colors.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={[s.iconBtn, printing && { opacity: 0.5 }]} onPress={() => setShowPrintModal(true)} disabled={printing}>
             <Feather name={printing ? "loader" : "printer"} size={17} color={colors.primary} />
           </TouchableOpacity>
@@ -357,23 +371,25 @@ export default function PrescriptionDetailScreen() {
         </View>
 
         {/* Chief Complaints */}
-        {rx.chiefComplaints ? (
-          <SectionBlock title="Chief Complaints">
+        {sectionEnabled("chiefComplaints") && rx.chiefComplaints ? (
+          <SectionBlock title={sectionTitle("chiefComplaints", "Chief Complaints")}>
             <InfoCard><Text style={s.bodyText}>{rx.chiefComplaints}</Text></InfoCard>
           </SectionBlock>
         ) : null}
 
         {/* Past History */}
-        <SectionBlock title="Past History">
-          <InfoCard><HistoryBadges h={rx.pastHistory} /></InfoCard>
-        </SectionBlock>
+        {sectionEnabled("pastHistory") ? (
+          <SectionBlock title={sectionTitle("pastHistory", "Past History")}>
+            <InfoCard><HistoryBadges h={rx.pastHistory} /></InfoCard>
+          </SectionBlock>
+        ) : null}
 
         {/* VA */}
-        <VASection reVA={rx.rightEyeVA} leVA={rx.leftEyeVA} />
+        {sectionEnabled("visualAcuity") ? <VASection reVA={rx.rightEyeVA} leVA={rx.leftEyeVA} title={sectionTitle("visualAcuity", "Visual Acuity")} /> : null}
 
         {/* Examination */}
-        {(rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) && (
-          <SectionBlock title="Examination Findings">
+        {sectionEnabled("examination") && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) && (
+          <SectionBlock title={sectionTitle("examination", "Examination Findings")}>
             <InfoCard>
               <LabelValue label="Adnexa" value={rx.adnexa} />
               <LabelValue label="Anterior Segment" value={rx.anteriorSegment} />
@@ -383,8 +399,8 @@ export default function PrescriptionDetailScreen() {
         )}
 
         {/* GAT */}
-        {(rx.gatRight || rx.gatLeft) && (
-          <SectionBlock title="GAT / Intraocular Pressure">
+        {sectionEnabled("gat") && (rx.gatRight || rx.gatLeft) && (
+          <SectionBlock title={sectionTitle("gat", "GAT / Intraocular Pressure")}>
             <InfoCard>
               <View style={{ flexDirection: "row", gap: 20 }}>
                 {rx.gatRight ? (
@@ -405,8 +421,8 @@ export default function PrescriptionDetailScreen() {
         )}
 
         {/* Drugs */}
-        {rx.drugs && rx.drugs.length > 0 && (
-          <SectionBlock title="Rx — Drugs & Medications">
+        {sectionEnabled("drugs") && rx.drugs && rx.drugs.length > 0 && (
+          <SectionBlock title={sectionTitle("drugs", "Rx — Drugs & Medications")}>
             <View style={{ gap: 10 }}>
               {rx.drugs.map((drug: Drug, i: number) => (
                 <InfoCard key={drug.id ?? i}>
@@ -440,11 +456,11 @@ export default function PrescriptionDetailScreen() {
         )}
 
         {/* Spectacle Rx */}
-        <RxTable reD={rx.rightEyeDistance} leD={rx.leftEyeDistance} reN={rx.rightEyeNear} leN={rx.leftEyeNear} ipd={rx.ipd} />
+        {sectionEnabled("spectacle") ? <RxTable reD={rx.rightEyeDistance} leD={rx.leftEyeDistance} reN={rx.rightEyeNear} leN={rx.leftEyeNear} ipd={rx.ipd} /> : null}
 
         {/* Lens Options */}
-        {lensOpts.length > 0 && (
-          <SectionBlock title="Lens Options">
+        {sectionEnabled("lens") && lensOpts.length > 0 && (
+          <SectionBlock title={sectionTitle("lens", "Lens Options")}>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               {lensOpts.map((opt) => (
                 <View key={opt} style={{ backgroundColor: colors.secondary, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.primary + "40" }}>
@@ -456,8 +472,8 @@ export default function PrescriptionDetailScreen() {
         )}
 
         {/* Advice */}
-        {rx.advice ? (
-          <SectionBlock title="Advice (উপদেশ)">
+        {sectionEnabled("advice") && rx.advice ? (
+          <SectionBlock title={sectionTitle("advice", "Advice (উপদেশ)")}>
             <InfoCard>
               <Text style={s.bodyText}>{rx.advice}</Text>
               {rx.adviceBn ? (
@@ -471,8 +487,8 @@ export default function PrescriptionDetailScreen() {
         ) : null}
 
         {/* Follow-up */}
-        {rx.followUp ? (
-          <SectionBlock title="Follow-up (পরবর্তী ভিজিট)">
+        {sectionEnabled("followUp") && rx.followUp ? (
+          <SectionBlock title={sectionTitle("followUp", "Follow-up (পরবর্তী ভিজিট)")}>
             <InfoCard>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Feather name="calendar" size={16} color={colors.primary} />
@@ -486,6 +502,14 @@ export default function PrescriptionDetailScreen() {
             </InfoCard>
           </SectionBlock>
         ) : null}
+
+        {(rx.customSections || []).map((section) => {
+          return section.content ? (
+            <SectionBlock key={section.id} title={section.title}>
+              <InfoCard><Text style={s.bodyText}>{section.content}</Text></InfoCard>
+            </SectionBlock>
+          ) : null;
+        })}
 
         {/* Chamber footer */}
         {(doctor.chamberName || doctor.chamberAddress) && (

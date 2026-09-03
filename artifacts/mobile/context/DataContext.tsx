@@ -6,11 +6,13 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { DoctorProfile, Patient, Prescription } from "@/types";
+import { DoctorProfile, Patient, Prescription, PrescriptionConfig } from "@/types";
+import { DEFAULT_PRESCRIPTION_CONFIG, normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
 
 const PRESCRIPTIONS_KEY = "@optiscript_prescriptions";
 const PATIENTS_KEY = "@optiscript_patients";
 const DOCTOR_KEY = "@optiscript_doctor";
+const PRESCRIPTION_CONFIG_KEY = "@optiscript_prescription_config";
 
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -50,13 +52,16 @@ interface DataContextValue {
   prescriptions: Prescription[];
   patients: Patient[];
   doctor: DoctorProfile;
+  prescriptionConfig: PrescriptionConfig;
   loading: boolean;
   addPrescription: (rx: Omit<Prescription, "id" | "createdAt">) => Promise<Prescription>;
+  updatePrescription: (id: string, rx: Omit<Prescription, "id" | "createdAt">) => Promise<void>;
   deletePrescription: (id: string) => Promise<void>;
   addPatient: (p: Omit<Patient, "id" | "createdAt">) => Promise<Patient>;
   updatePatient: (id: string, p: Partial<Patient>) => Promise<void>;
   deletePatient: (id: string) => Promise<void>;
   updateDoctor: (d: Partial<DoctorProfile>) => Promise<void>;
+  updatePrescriptionConfig: (config: PrescriptionConfig) => Promise<void>;
   getPrescriptionsForPatient: (patientId: string) => Prescription[];
   getPatientByPuid: (puid: string) => Patient | undefined;
 }
@@ -84,15 +89,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [doctor, setDoctor] = useState<DoctorProfile>(DEFAULT_DOCTOR);
+  const [prescriptionConfig, setPrescriptionConfig] = useState<PrescriptionConfig>(DEFAULT_PRESCRIPTION_CONFIG);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [rxRaw, pRaw, dRaw] = await Promise.all([
+        const [rxRaw, pRaw, dRaw, configRaw] = await Promise.all([
           AsyncStorage.getItem(PRESCRIPTIONS_KEY),
           AsyncStorage.getItem(PATIENTS_KEY),
           AsyncStorage.getItem(DOCTOR_KEY),
+          AsyncStorage.getItem(PRESCRIPTION_CONFIG_KEY),
         ]);
         if (rxRaw) setPrescriptions(JSON.parse(rxRaw));
         if (pRaw) {
@@ -107,6 +114,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           setPatients(migrated);
         }
         if (dRaw) setDoctor({ ...DEFAULT_DOCTOR, ...JSON.parse(dRaw) });
+        if (configRaw) setPrescriptionConfig(normalizePrescriptionConfig(JSON.parse(configRaw)));
       } catch {
       } finally {
         setLoading(false);
@@ -135,6 +143,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const deletePrescription = useCallback(async (id: string) => {
     setPrescriptions((prev) => {
       const updated = prev.filter((r) => r.id !== id);
+      AsyncStorage.setItem(PRESCRIPTIONS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const updatePrescription = useCallback(async (id: string, rx: Omit<Prescription, "id" | "createdAt">) => {
+    setPrescriptions((prev) => {
+      const current = prev.find((item) => item.id === id);
+      const updated = prev.map((item) => item.id === id
+        ? { ...rx, id, createdAt: current?.createdAt || new Date().toISOString() }
+        : item);
       AsyncStorage.setItem(PRESCRIPTIONS_KEY, JSON.stringify(updated));
       return updated;
     });
@@ -193,6 +212,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const updatePrescriptionConfig = useCallback(async (config: PrescriptionConfig) => {
+    const normalized = normalizePrescriptionConfig(config);
+    setPrescriptionConfig(normalized);
+    await AsyncStorage.setItem(PRESCRIPTION_CONFIG_KEY, JSON.stringify(normalized));
+  }, []);
+
   const getPrescriptionsForPatient = useCallback(
     (patientId: string) => prescriptions.filter((r) => r.patientId === patientId),
     [prescriptions]
@@ -209,13 +234,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         prescriptions,
         patients,
         doctor,
+        prescriptionConfig,
         loading,
         addPrescription,
+        updatePrescription,
         deletePrescription,
         addPatient,
         updatePatient,
         deletePatient,
         updateDoctor,
+        updatePrescriptionConfig,
         getPrescriptionsForPatient,
         getPatientByPuid,
       }}

@@ -191,6 +191,16 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
+        <FieldGroup title="Prescription">
+          <Text style={{ fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 12 }}>
+            Customize every picker option and manage the sections that appear on new prescriptions.
+          </Text>
+          <TouchableOpacity style={s.changePasswordBtn} onPress={() => router.push("/prescription-settings")} activeOpacity={0.85}>
+            <Feather name="sliders" size={17} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={s.changePasswordText}>Customize prescription form</Text>
+          </TouchableOpacity>
+        </FieldGroup>
+
         <FieldGroup title="Account">
           <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: colors.foreground, marginBottom: 12 }}>
             {user?.primaryEmailAddress?.emailAddress || "Signed-in OptiScript account"}

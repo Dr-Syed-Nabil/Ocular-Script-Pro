@@ -39,6 +39,7 @@ import {
   EyeVA,
   PastHistory,
   Patient,
+  CustomPrescriptionSection,
 } from "@/types";
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
@@ -49,30 +50,6 @@ const EMPTY_HISTORY: PastHistory = {
   dm: false, htn: false, ihd: false, ckd: false,
   ba: false, thyDs: false, uromax: false, others: "",
 };
-const DRUG_ROUTES = ["Eye Drops", "Eye Ointment", "Oral", "Injection", "Topical"];
-const CHIEF_COMPLAINTS = [
-  "Blurred vision",
-  "Diminution of vision",
-  "Pain",
-  "Redness",
-  "Watering",
-  "Itching",
-  "Photophobia",
-  "Discharge",
-  "Foreign body sensation",
-  "Dryness",
-  "Floaters",
-  "Flashes",
-  "Double vision",
-  "Distortion of vision",
-  "Difficulty seeing near",
-  "Difficulty seeing at distance",
-  "Eye strain",
-  "Headache",
-  "Swelling",
-  "Trauma",
-  "Glare / haloes",
-] as const;
 const LATERALITIES: ComplaintLaterality[] = ["R", "L", "B"];
 
 function formatChiefComplaints(selections: ChiefComplaintSelection[], freeText: string): string {
@@ -156,10 +133,11 @@ function ToggleGroup({ options, value, onChange, multi }: { options: string[]; v
 
 /* ───────── VA Table ───────── */
 
-function VATable({ reVA, leVA, onChangeRe, onChangeLe }: {
+function VATable({ reVA, leVA, onChangeRe, onChangeLe, options }: {
   reVA: EyeVA; leVA: EyeVA;
   onChangeRe: (f: keyof EyeVA, v: string) => void;
   onChangeLe: (f: keyof EyeVA, v: string) => void;
+  options: string[];
 }) {
   const colors = useColors();
 
@@ -186,6 +164,7 @@ function VATable({ reVA, leVA, onChangeRe, onChangeLe }: {
             fieldLabel={label}
             eyeLabel="RE"
             includeNI={ni}
+            options={options}
           />
           <VAPicker
             value={leVA[key]}
@@ -193,6 +172,7 @@ function VATable({ reVA, leVA, onChangeRe, onChangeLe }: {
             fieldLabel={label}
             eyeLabel="LE"
             includeNI={ni}
+            options={options}
           />
         </View>
       ))}
@@ -202,10 +182,11 @@ function VATable({ reVA, leVA, onChangeRe, onChangeLe }: {
 
 /* ───────── Spectacle Table ───────── */
 
-function RxBlock({ title, re, le, onFn, readOnly }: {
+function RxBlock({ title, re, le, onFn, readOnly, vaOptions }: {
   title: string; re: EyeSpectacleRx; le: EyeSpectacleRx;
   onFn: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
   readOnly?: boolean;
+  vaOptions: string[];
 }) {
   const colors = useColors();
   return (
@@ -251,14 +232,22 @@ function RxBlock({ title, re, le, onFn, readOnly }: {
                 <SpectacleValuePicker values={AXIS_VALUES} value={rx.axis} onChange={(v) => onFn(eye, "axis", v)} format={formatAxis} placeholder="AXIS" />
               )}
             </View>
-            {/* VA — always free text */}
+            {/* VA — configurable, separately selectable for each eye */}
             <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 2 }}>
               {eye === "re" && <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>VA</Text>}
-              <TextInput
-                style={{ width: "100%", borderWidth: 1.5, borderColor: colors.border, borderRadius: 6, paddingVertical: 7, fontSize: 13, fontFamily: "Inter_500Medium", color: colors.foreground, textAlign: "center", backgroundColor: colors.surface }}
-                value={rx.va} onChangeText={(v) => onFn(eye, "va", v)}
-                placeholder="6/6" placeholderTextColor={colors.mutedForeground} autoCorrect={false}
-              />
+              {readOnly ? (
+                <View style={{ width: "100%", borderWidth: 1.5, borderColor: colors.primary + "60", borderRadius: 6, paddingVertical: 9, alignItems: "center", backgroundColor: colors.secondary }}>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>{rx.va || "—"}</Text>
+                </View>
+              ) : (
+                <VAPicker
+                  value={rx.va}
+                  onChange={(v) => onFn(eye, "va", v)}
+                  fieldLabel="VA"
+                  eyeLabel={eye === "re" ? "RE" : "LE"}
+                  options={vaOptions}
+                />
+              )}
             </View>
           </View>
         );
@@ -267,7 +256,7 @@ function RxBlock({ title, re, le, onFn, readOnly }: {
   );
 }
 
-function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRxD, onChangeRxN, onChangeIPD, onChangeAdd }: {
+function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRxD, onChangeRxN, onChangeIPD, onChangeAdd, distanceVA, nearVA }: {
   reD: EyeSpectacleRx; leD: EyeSpectacleRx;
   reN: EyeSpectacleRx; leN: EyeSpectacleRx;
   ipd: string; nearIPD: string; addValue: string;
@@ -275,11 +264,13 @@ function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRx
   onChangeRxN: (eye: "re" | "le", f: keyof EyeSpectacleRx, v: string) => void;
   onChangeIPD: (v: string) => void;
   onChangeAdd: (v: string) => void;
+  distanceVA: string[];
+  nearVA: string[];
 }) {
   const colors = useColors();
   return (
     <View style={{ backgroundColor: colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
-      <RxBlock title="Distance (D)" re={reD} le={leD} onFn={onChangeRxD} />
+      <RxBlock title="Distance (D)" re={reD} le={leD} onFn={onChangeRxD} vaOptions={distanceVA} />
 
       {/* ── Presbyopic Addition ── */}
       <View style={{ borderTopWidth: 2, borderTopColor: colors.border, backgroundColor: colors.secondary + "80", paddingHorizontal: 12, paddingVertical: 8 }}>
@@ -296,7 +287,7 @@ function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRx
         </View>
       </View>
 
-      <RxBlock title="Near (N) — auto-filled" re={reN} le={leN} onFn={onChangeRxN} readOnly={!!addValue} />
+      <RxBlock title="Near (N)" re={reN} le={leN} onFn={onChangeRxN} readOnly={false} vaOptions={nearVA} />
 
       {/* ── IPD ── */}
       <View style={{ borderTopWidth: 2, borderTopColor: colors.border, paddingHorizontal: 12, paddingVertical: 10 }}>
@@ -327,11 +318,12 @@ function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRx
 
 /* ───────── Drug Row ───────── */
 
-function DrugRow({ drug, onChange, onDelete, drugSuggestions }: {
+function DrugRow({ drug, onChange, onDelete, drugSuggestions, routes }: {
   drug: Drug;
   onChange: (updated: Drug) => void;
   onDelete: () => void;
   drugSuggestions: ReturnType<typeof useSuggestions>;
+  routes: string[];
 }) {
   const colors = useColors();
   const scheduleSugg = useSuggestions("drug_schedule");
@@ -367,7 +359,7 @@ function DrugRow({ drug, onChange, onDelete, drugSuggestions }: {
       />
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-        {DRUG_ROUTES.map((r) => (
+        {routes.map((r) => (
           <TouchableOpacity key={r}
             style={{ borderWidth: 1.5, borderColor: drug.route === r ? colors.primary : colors.border, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: drug.route === r ? colors.secondary : colors.card }}
             onPress={() => onChange({ ...drug, route: r })}
@@ -438,9 +430,9 @@ function DrugRow({ drug, onChange, onDelete, drugSuggestions }: {
 export default function NewRxScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { patients, prescriptions, addPrescription, addPatient, getPatientByPuid } = useData();
+  const { patients, prescriptions, addPrescription, updatePrescription, addPatient, getPatientByPuid, prescriptionConfig, updatePrescriptionConfig } = useData();
   const s = styles(colors);
-  const { duplicateFrom } = useLocalSearchParams<{ duplicateFrom?: string }>();
+  const { duplicateFrom, editId } = useLocalSearchParams<{ duplicateFrom?: string; editId?: string }>();
 
   const [cameraPermission, requestPermission] = useCameraPermissions();
   const [showScanner, setShowScanner] = useState(false);
@@ -512,8 +504,27 @@ export default function NewRxScreen() {
   const [adviceBn, setAdviceBn] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [followUpBn, setFollowUpBn] = useState("");
+  const [customSections, setCustomSections] = useState<CustomPrescriptionSection[]>([]);
 
   const [saving, setSaving] = useState(false);
+  const chiefComplaintOptions = useMemo(() => {
+    const options = [...prescriptionConfig.chiefComplaints, ...ccSugg.all];
+    return options.filter((complaint, index) =>
+      complaint.trim() && options.findIndex((item) => item.toLowerCase() === complaint.toLowerCase()) === index
+    );
+  }, [prescriptionConfig.chiefComplaints, ccSugg.all]);
+
+  const saveCustomComplaintOption = useCallback(async () => {
+    const complaint = customComplaint.trim();
+    if (!complaint) return;
+    ccSugg.add(complaint);
+    if (!prescriptionConfig.chiefComplaints.some((item) => item.toLowerCase() === complaint.toLowerCase())) {
+      await updatePrescriptionConfig({
+        ...prescriptionConfig,
+        chiefComplaints: [...prescriptionConfig.chiefComplaints, complaint],
+      });
+    }
+  }, [ccSugg, customComplaint, prescriptionConfig, updatePrescriptionConfig]);
 
   const filteredPatients = useMemo(() => {
     if (!patientQuery.trim()) return patients.slice(0, 8);
@@ -523,8 +534,9 @@ export default function NewRxScreen() {
 
   // ── Duplicate Rx pre-fill ──
   useEffect(() => {
-    if (!duplicateFrom) return;
-    const source = prescriptions.find((r) => r.id === duplicateFrom);
+    const sourceId = editId || duplicateFrom;
+    if (!sourceId) return;
+    const source = prescriptions.find((r) => r.id === sourceId);
     if (!source) return;
     const patient = patients.find((p) => p.id === source.patientId);
     if (patient) { setSelectedPatient(patient); setPatientQuery(patient.name); }
@@ -532,7 +544,7 @@ export default function NewRxScreen() {
     setReVA(source.rightEyeVA); setLeVA(source.leftEyeVA);
     setChiefComplaints(source.chiefComplaints);
     setChiefComplaintSelections(source.chiefComplaintSelections || []);
-    setCustomComplaint(source.chiefComplaintSelections ? "" : source.chiefComplaints);
+    setCustomComplaint(source.customComplaint || (!source.chiefComplaintSelections?.length ? source.chiefComplaints : ""));
     setHistory(source.pastHistory);
     setAdnexa(source.adnexa); setAnteriorSegment(source.anteriorSegment); setPosteriorSegment(source.posteriorSegment);
     setGatRight(source.gatRight); setGatLeft(source.gatLeft);
@@ -544,8 +556,22 @@ export default function NewRxScreen() {
     setLensCoating(source.lensCoating || []); setLensMaterial(source.lensMaterial);
     setAdvice(source.advice); setAdviceBn(source.adviceBn);
     setFollowUp(source.followUp); setFollowUpBn(source.followUpBn);
+    setCustomSections(source.customSections || []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const sectionTitle = (id: string, fallback: string) =>
+    prescriptionConfig.sections.find((section) => section.id === id)?.title || fallback;
+  const sectionEnabled = (id: string) =>
+    id === "patient" || prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false;
+  const updateCustomSection = (id: string, content: string) => {
+    setCustomSections((current) => {
+      const existing = current.find((section) => section.id === id);
+      if (existing) return current.map((section) => section.id === id ? { ...section, content } : section);
+      const definition = prescriptionConfig.sections.find((section) => section.id === id);
+      return definition ? [...current, { id, title: definition.title, content }] : current;
+    });
+  };
 
   // ── QR scanner handler ──
   const handleBarCodeScanned = useCallback(({ data }: { data: string }) => {
@@ -613,18 +639,18 @@ export default function NewRxScreen() {
       if (!patient) return;
 
       // Auto-save suggestions
-      if (chiefComplaints.trim()) ccSugg.add(chiefComplaints);
+      await saveCustomComplaintOption();
       if (adnexa.trim()) adnexaSugg.add(adnexa);
       if (anteriorSegment.trim()) anteriorSugg.add(anteriorSegment);
       if (posteriorSegment.trim()) posteriorSugg.add(posteriorSegment);
       if (advice.trim()) adviceSugg.add(advice);
       drugs.forEach((d) => { if (d.name) drugNameSugg.add(d.name); });
 
-      await addPrescription({
+      const prescriptionData = {
         patientId: patient.id, patientName: patient.name, patientAge,
         date: new Date().toISOString().split("T")[0],
         rightEyeVA: reVA, leftEyeVA: leVA,
-         chiefComplaints, chiefComplaintSelections, pastHistory: history,
+         chiefComplaints, chiefComplaintSelections, customComplaint: customComplaint.trim(), pastHistory: history,
         adnexa, anteriorSegment, posteriorSegment,
         gatRight, gatLeft,
         drugs: drugs.filter((d) => d.name.trim()),
@@ -632,7 +658,15 @@ export default function NewRxScreen() {
         rightEyeNear: reN, leftEyeNear: leN, ipd, nearIPD, addValue,
         lensUsage, lensType, lensCoating, lensMaterial,
         advice, adviceBn, followUp, followUpBn,
-      });
+        customSections: customSections.filter((section) => section.content.trim()),
+        sectionTitles: Object.fromEntries(prescriptionConfig.sections.map((section) => [section.id, section.title])),
+        hiddenSections: prescriptionConfig.sections.filter((section) => !section.enabled).map((section) => section.id),
+      };
+      if (editId) {
+        await updatePrescription(editId, prescriptionData);
+      } else {
+        await addPrescription(prescriptionData);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch {
@@ -698,7 +732,7 @@ export default function NewRxScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {CHIEF_COMPLAINTS.map((complaint) => {
+              {chiefComplaintOptions.map((complaint) => {
                 const selection = chiefComplaintSelections.find((item) => item.complaint === complaint);
                 const selected = Boolean(selection);
                 return (
@@ -752,6 +786,7 @@ export default function NewRxScreen() {
             <TouchableOpacity
               style={s.doneButton}
               onPress={() => {
+                void saveCustomComplaintOption();
                 setChiefComplaints(formatChiefComplaints(chiefComplaintSelections, customComplaint));
                 setShowComplaintPicker(false);
               }}
@@ -766,7 +801,7 @@ export default function NewRxScreen() {
         <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
           <Feather name="x" size={20} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={s.navTitle}>{duplicateFrom ? "Duplicate Rx" : "New Prescription"}</Text>
+        <Text style={s.navTitle}>{editId ? "Edit Prescription" : duplicateFrom ? "Duplicate Rx" : "New Prescription"}</Text>
         <TouchableOpacity style={[s.saveBtn, saving && s.saveBtnDisabled]} onPress={handleSave} disabled={saving}>
           <Text style={s.saveBtnText}>{saving ? "Saving…" : "Save Rx"}</Text>
         </TouchableOpacity>
@@ -843,7 +878,8 @@ export default function NewRxScreen() {
         </View>
 
         {/* ─── Chief Complaints ─── */}
-        <SectionTitle title="Chief Complaints" />
+        {sectionEnabled("chiefComplaints") ? <>
+        <SectionTitle title={sectionTitle("chiefComplaints", "Chief Complaints")} />
         <TouchableOpacity
           style={s.complaintField}
           onPress={() => setShowComplaintPicker(true)}
@@ -854,9 +890,11 @@ export default function NewRxScreen() {
           </Text>
           <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
         </TouchableOpacity>
+        </> : null}
 
         {/* ─── Past History ─── */}
-        <SectionTitle title="Past History" />
+        {sectionEnabled("pastHistory") ? <>
+        <SectionTitle title={sectionTitle("pastHistory", "Past History")} />
         <View style={s.checkGrid}>
           {([["dm","DM"],["htn","HTN"],["ihd","IHD"],["ckd","CKD"],["ba","BA"],["thyDs","Thyroid Ds"],["uromax","Uromax"]] as [keyof PastHistory, string][]).map(([key, label]) => (
             <CheckItem key={key} label={label} value={history[key] as boolean} onChange={(v) => setHistory((h) => ({ ...h, [key]: v }))} />
@@ -868,17 +906,22 @@ export default function NewRxScreen() {
             onChangeText={(v) => setHistory((h) => ({ ...h, others: v }))}
             placeholder="Other medical history…" />
         </View>
+        </> : null}
 
         {/* ─── Visual Acuity ─── */}
-        <SectionTitle title="Visual Acuity" />
+        {sectionEnabled("visualAcuity") ? <>
+        <SectionTitle title={sectionTitle("visualAcuity", "Visual Acuity")} />
         <VATable
           reVA={reVA} leVA={leVA}
           onChangeRe={(f, v) => setReVA((p) => ({ ...p, [f]: v }))}
           onChangeLe={(f, v) => setLeVA((p) => ({ ...p, [f]: v }))}
+          options={prescriptionConfig.visualAcuity}
         />
+        </> : null}
 
         {/* ─── Examination ─── */}
-        <SectionTitle title="Examination Findings" />
+        {sectionEnabled("examination") ? <>
+        <SectionTitle title={sectionTitle("examination", "Examination Findings")} />
         <MiniLabel label="Adnexa" />
         <SmartInput fieldKey="adnexa" value={adnexa} onChangeText={setAdnexa} placeholder="Eyelid, lacrimal, orbit…" minHeight={64} multiline />
         <View style={{ height: 8 }} />
@@ -887,9 +930,11 @@ export default function NewRxScreen() {
         <View style={{ height: 8 }} />
         <MiniLabel label="Posterior Segment" />
         <SmartInput fieldKey="posterior_segment" value={posteriorSegment} onChangeText={setPosteriorSegment} placeholder="Vitreous, retina, disc, macula…" minHeight={80} multiline />
+        </> : null}
 
         {/* ─── GAT ─── */}
-        <SectionTitle title="GAT / Intraocular Pressure" />
+        {sectionEnabled("gat") ? <>
+        <SectionTitle title={sectionTitle("gat", "GAT / Intraocular Pressure")} />
         <View style={s.row}>
           <View style={{ flex: 1 }}>
             <MiniLabel label="RE (mmHg)" />
@@ -901,19 +946,23 @@ export default function NewRxScreen() {
             <TextInput style={[s.input, { textAlign: "center" }]} value={gatLeft} onChangeText={setGatLeft} placeholder="14" keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
           </View>
         </View>
+        </> : null}
 
         {/* ─── Rx / Drugs ─── */}
-        <SectionTitle title="Rx — Drugs & Medications" />
+        {sectionEnabled("drugs") ? <>
+        <SectionTitle title={sectionTitle("drugs", "Rx — Drugs & Medications")} />
         {drugs.map((drug) => (
-          <DrugRow key={drug.id} drug={drug} onChange={(u) => updateDrug(drug.id, u)} onDelete={() => removeDrug(drug.id)} drugSuggestions={drugNameSugg} />
+          <DrugRow key={drug.id} drug={drug} onChange={(u) => updateDrug(drug.id, u)} onDelete={() => removeDrug(drug.id)} drugSuggestions={drugNameSugg} routes={prescriptionConfig.drugRoutes} />
         ))}
         <TouchableOpacity style={s.addDrugBtn} onPress={addDrug}>
           <Feather name="plus" size={16} color={colors.primary} style={{ marginRight: 6 }} />
           <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.primary }}>Add Drug</Text>
         </TouchableOpacity>
+        </> : null}
 
         {/* ─── Spectacle Correction ─── */}
-        <SectionTitle title="Spectacle Correction" />
+        {sectionEnabled("spectacle") ? <>
+        <SectionTitle title={sectionTitle("spectacle", "Spectacle Correction")} />
         <SpectacleTable
           reD={reD} leD={leD} reN={reN} leN={leN}
           ipd={ipd} nearIPD={nearIPD} addValue={addValue}
@@ -921,24 +970,44 @@ export default function NewRxScreen() {
           onChangeRxN={(eye, f, v) => { if (eye === "re") setReN((p) => ({ ...p, [f]: v })); else setLeN((p) => ({ ...p, [f]: v })); }}
           onChangeIPD={setIpd}
           onChangeAdd={setAddValue}
+          distanceVA={prescriptionConfig.distanceVA}
+          nearVA={prescriptionConfig.nearVA}
         />
+        </> : null}
 
         {/* ─── Lens Options ─── */}
-        <SectionTitle title="Lens Options" />
+        {sectionEnabled("lens") ? <>
+        <SectionTitle title={sectionTitle("lens", "Lens Options")} />
         <MiniLabel label="Usage" />
-        <ToggleGroup value={lensUsage} onChange={(v) => setLensUsage(v as string)} options={["Constant use", "Distance only", "Near only", "Computer/intermediate"]} />
+        <ToggleGroup value={lensUsage} onChange={(v) => setLensUsage(v as string)} options={prescriptionConfig.lensUsage} />
         <View style={{ height: 12 }} />
         <MiniLabel label="Type" />
-        <ToggleGroup value={lensType} onChange={(v) => setLensType(v as string)} options={["Monofocal", "Bifocal", "Progressive"]} />
+        <ToggleGroup value={lensType} onChange={(v) => setLensType(v as string)} options={prescriptionConfig.lensType} />
         <View style={{ height: 12 }} />
         <MiniLabel label="Coating" />
-        <ToggleGroup value={lensCoating} onChange={(v) => setLensCoating(v as string[])} options={["Blue-Cut", "Photosun", "Anti-Reflective"]} multi />
+        <ToggleGroup value={lensCoating} onChange={(v) => setLensCoating(v as string[])} options={prescriptionConfig.lensCoating} multi />
         <View style={{ height: 12 }} />
         <MiniLabel label="Material" />
-        <ToggleGroup value={lensMaterial} onChange={(v) => setLensMaterial(v as string)} options={["Glass", "Plastic"]} />
+        <ToggleGroup value={lensMaterial} onChange={(v) => setLensMaterial(v as string)} options={prescriptionConfig.lensMaterial} />
+        </> : null}
+
+        {prescriptionConfig.sections.filter((section) => !section.builtIn && section.enabled).map((section) => (
+          <View key={section.id}>
+            <SectionTitle title={section.title} />
+            <SmartInput
+              fieldKey={`custom_${section.id}`}
+              value={customSections.find((item) => item.id === section.id)?.content || ""}
+              onChangeText={(value) => updateCustomSection(section.id, value)}
+              placeholder={`Enter ${section.title.toLowerCase()}…`}
+              minHeight={90}
+              multiline
+            />
+          </View>
+        ))}
 
         {/* ─── Advice ─── */}
-        <SectionTitle title="Advice (উপদেশ)" />
+        {sectionEnabled("advice") ? <>
+        <SectionTitle title={sectionTitle("advice", "Advice (উপদেশ)")} />
         <SmartInput fieldKey="advice" value={advice} onChangeText={(v) => { setAdvice(v); setAdviceBn(""); }}
           placeholder="Instructions for the patient…" minHeight={100} multiline showTranslate />
         {!isAlreadyBangla(advice) && advice.trim() ? (
@@ -955,12 +1024,14 @@ export default function NewRxScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+        </> : null}
 
         {/* ─── Follow-up ─── */}
-        <SectionTitle title="Follow-up (পরবর্তী ভিজিট)" />
+        {sectionEnabled("followUp") ? <>
+        <SectionTitle title={sectionTitle("followUp", "Follow-up (পরবর্তী ভিজিট)")} />
         <ToggleGroup value={followUp}
           onChange={(v) => { setFollowUp(v as string); setFollowUpBn(translateToBangla(v as string)); }}
-          options={["1 week", "2 weeks", "1 month", "3 months", "6 months", "1 year", "As needed"]}
+          options={prescriptionConfig.followUp}
         />
         <View style={{ height: 8 }} />
         <SmartInput fieldKey="followup_custom" value={followUp} onChangeText={(v) => { setFollowUp(v); setFollowUpBn(translateToBangla(v)); }}
@@ -973,6 +1044,7 @@ export default function NewRxScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+        </> : null}
       </KeyboardAwareScrollView>
     </View>
   );

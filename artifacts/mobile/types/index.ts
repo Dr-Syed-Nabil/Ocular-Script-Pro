@@ -41,6 +41,34 @@ export interface ChiefComplaintSelection {
   laterality?: ComplaintLaterality;
 }
 
+export interface PrescriptionSectionConfig {
+  id: string;
+  title: string;
+  enabled: boolean;
+  builtIn: boolean;
+}
+
+export interface CustomPrescriptionSection {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface PrescriptionConfig {
+  version: number;
+  chiefComplaints: string[];
+  visualAcuity: string[];
+  distanceVA: string[];
+  nearVA: string[];
+  drugRoutes: string[];
+  lensUsage: string[];
+  lensType: string[];
+  lensCoating: string[];
+  lensMaterial: string[];
+  followUp: string[];
+  sections: PrescriptionSectionConfig[];
+}
+
 export interface Prescription {
   id: string;
   patientId: string;
@@ -53,7 +81,11 @@ export interface Prescription {
 
   chiefComplaints: string;
   chiefComplaintSelections?: ChiefComplaintSelection[];
+  customComplaint?: string;
   pastHistory: PastHistory;
+  customSections?: CustomPrescriptionSection[];
+  sectionTitles?: Record<string, string>;
+  hiddenSections?: string[];
 
   adnexa: string;
   anteriorSegment: string;

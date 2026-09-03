@@ -40,7 +40,7 @@ function vaTable(reVA: EyeVA, leVA: EyeVA): string {
 
 /* ── spectacle table ── */
 function rxBlock(title: string, re: EyeSpectacleRx, le: EyeSpectacleRx): string {
-  const hasDist = re.dsp || re.dcyl || le.dsp || le.dcyl;
+  const hasDist = re.dsp || re.dcyl || re.va || le.dsp || le.dcyl || le.va;
   if (!hasDist) return "";
   return `
     <tr class="rx-subtitle"><td colspan="5">${esc(title)}</td></tr>
@@ -74,6 +74,25 @@ function historyBadges(h: PastHistory): string {
   const allItems = [...items, h.others].filter(Boolean);
   if (!allItems.length) return "<span class='none'>None recorded</span>";
   return allItems.map((it) => `<span class="badge">${esc(it)}</span>`).join(" ");
+}
+
+function customSectionsHTML(rx: Prescription): string {
+  return (rx.customSections || [])
+    .filter((section) => section.content?.trim())
+    .map((section) => `
+      <div class="section">
+        <div class="sec-title">${esc(section.title)}</div>
+        <div class="sec-body"><p class="advice-en">${esc(section.content)}</p></div>
+      </div>`)
+    .join("");
+}
+
+function showSection(rx: Prescription, id: string): boolean {
+  return !rx.hiddenSections?.includes(id);
+}
+
+function sectionTitle(rx: Prescription, id: string, fallback: string): string {
+  return rx.sectionTitles?.[id] || fallback;
 }
 
 /* ── FULL PRINT template ── */
@@ -208,29 +227,29 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>
 
   <!-- Chief Complaints -->
-  ${rx.chiefComplaints ? `
+  ${showSection(rx, "chiefComplaints") && rx.chiefComplaints ? `
   <div class="section">
-    <div class="sec-title">Chief Complaints</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "chiefComplaints", "Chief Complaints"))}</div>
     <div class="sec-body"><p class="advice-en">${esc(rx.chiefComplaints)}</p></div>
   </div>` : ""}
 
   <!-- Past History -->
-  <div class="section">
-    <div class="sec-title">Past History</div>
+  ${showSection(rx, "pastHistory") ? `<div class="section">
+    <div class="sec-title">${esc(sectionTitle(rx, "pastHistory", "Past History"))}</div>
     <div class="sec-body">${historyBadges(rx.pastHistory)}</div>
-  </div>
+  </div>` : ""}
 
   <!-- Visual Acuity -->
-  ${(rx.rightEyeVA?.ua || rx.leftEyeVA?.ua) ? `
+  ${showSection(rx, "visualAcuity") && (rx.rightEyeVA?.ua || rx.leftEyeVA?.ua || rx.rightEyeVA?.wa || rx.leftEyeVA?.wa || rx.rightEyeVA?.ph || rx.leftEyeVA?.ph || rx.rightEyeVA?.bcva || rx.leftEyeVA?.bcva) ? `
   <div class="section">
-    <div class="sec-title">Visual Acuity</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "visualAcuity", "Visual Acuity"))}</div>
     <div class="sec-body">${vaTable(rx.rightEyeVA, rx.leftEyeVA)}</div>
   </div>` : ""}
 
   <!-- Examination -->
-  ${(rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) ? `
+  ${showSection(rx, "examination") && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) ? `
   <div class="section">
-    <div class="sec-title">Examination Findings</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "examination", "Examination Findings"))}</div>
     <div class="sec-body">
       <table class="exam-table"><tbody>
         ${rx.adnexa ? `<tr><td class="exam-lbl">Adnexa</td><td>${esc(rx.adnexa)}</td></tr>` : ""}
@@ -241,9 +260,9 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- GAT -->
-  ${(rx.gatRight || rx.gatLeft) ? `
+  ${showSection(rx, "gat") && (rx.gatRight || rx.gatLeft) ? `
   <div class="section">
-    <div class="sec-title">GAT / Intraocular Pressure</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "gat", "GAT / Intraocular Pressure"))}</div>
     <div class="sec-body">
       ${rx.gatRight ? `<div class="gat-block"><div class="gat-eye">RE</div><div class="gat-val">${esc(rx.gatRight)} <span class="gat-unit">mmHg</span></div></div>` : ""}
       ${rx.gatLeft ? `<div class="gat-block"><div class="gat-eye">LE</div><div class="gat-val">${esc(rx.gatLeft)} <span class="gat-unit">mmHg</span></div></div>` : ""}
@@ -251,16 +270,16 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- Drugs -->
-  ${rx.drugs?.filter((d) => d.name).length ? `
+  ${showSection(rx, "drugs") && rx.drugs?.filter((d) => d.name).length ? `
   <div class="section">
-    <div class="sec-title">Rx — Drugs &amp; Medications</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "drugs", "Rx — Drugs &amp; Medications"))}</div>
     <div class="sec-body">${drugsSection(rx.drugs)}</div>
   </div>` : ""}
 
   <!-- Spectacle Correction -->
-  ${(rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp) ? `
+  ${showSection(rx, "spectacle") && (rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeDistance?.va || rx.leftEyeDistance?.va || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp || rx.rightEyeNear?.va || rx.leftEyeNear?.va) ? `
   <div class="section">
-    <div class="sec-title">Spectacle Correction</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "spectacle", "Spectacle Correction"))}</div>
     <div class="sec-body">
       <table class="rx-table"><tbody>
         ${rxBlock("Distance (D)", rx.rightEyeDistance, rx.leftEyeDistance)}
@@ -274,14 +293,14 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- Lens Options -->
-  ${lensOpts.length ? `
+  ${showSection(rx, "lens") && lensOpts.length ? `
   <div class="section">
-    <div class="sec-title">Lens Options</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "lens", "Lens Options"))}</div>
     <div class="sec-body">${lensOpts.map((o) => `<span class="lens-chip">${esc(o)}</span>`).join("")}</div>
   </div>` : ""}
 
   <!-- Advice -->
-  ${rx.advice ? `
+  ${showSection(rx, "advice") && rx.advice ? `
   <div class="section">
     <div class="sec-title">উপদেশ / Advice</div>
     <div class="sec-body">
@@ -291,7 +310,7 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- Follow-up -->
-  ${rx.followUp ? `
+  ${showSection(rx, "followUp") && rx.followUp ? `
   <div class="section">
     <div class="sec-title">পরবর্তী ভিজিট / Follow-up</div>
     <div class="sec-body">
@@ -299,6 +318,8 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
       ${rx.followUpBn && rx.followUpBn !== rx.followUp ? `<div class="followup-bn">${esc(rx.followUpBn)}</div>` : ""}
     </div>
   </div>` : ""}
+
+  ${customSectionsHTML(rx)}
 
   <!-- Chamber footer -->
   ${(doctor.chamberName || doctor.chamberAddress) ? `
@@ -348,7 +369,7 @@ export function generateRxPadHTML(rx: Prescription): string {
     <span class="small">&nbsp;&nbsp;${formatDate(rx.date)}</span>
   </div>
 
-  ${rx.chiefComplaints ? `<div class="field"><span class="val">${esc(rx.chiefComplaints)}</span></div>` : ""}
+  ${showSection(rx, "chiefComplaints") && rx.chiefComplaints ? `<div class="field"><span class="val">${esc(rx.chiefComplaints)}</span></div>` : ""}
 
   ${(() => {
     const items = [
@@ -360,28 +381,30 @@ export function generateRxPadHTML(rx: Prescription): string {
     return items.length ? `<div class="field small">${items.join(" / ")}</div>` : "";
   })()}
 
-  ${vaTable(rx.rightEyeVA, rx.leftEyeVA)}
+  ${showSection(rx, "visualAcuity") ? vaTable(rx.rightEyeVA, rx.leftEyeVA) : ""}
 
-  ${rx.adnexa ? `<div class="field"><span class="val">${esc(rx.adnexa)}</span></div>` : ""}
-  ${rx.anteriorSegment ? `<div class="field"><span class="val">${esc(rx.anteriorSegment)}</span></div>` : ""}
-  ${rx.posteriorSegment ? `<div class="field"><span class="val">${esc(rx.posteriorSegment)}</span></div>` : ""}
+  ${showSection(rx, "examination") && rx.adnexa ? `<div class="field"><span class="val">${esc(rx.adnexa)}</span></div>` : ""}
+  ${showSection(rx, "examination") && rx.anteriorSegment ? `<div class="field"><span class="val">${esc(rx.anteriorSegment)}</span></div>` : ""}
+  ${showSection(rx, "examination") && rx.posteriorSegment ? `<div class="field"><span class="val">${esc(rx.posteriorSegment)}</span></div>` : ""}
 
-  ${(rx.gatRight || rx.gatLeft) ? `<div class="field">RE: <span class="val">${esc(rx.gatRight) || "—"}</span> &nbsp; LE: <span class="val">${esc(rx.gatLeft) || "—"}</span> <span class="small">mmHg</span></div>` : ""}
+  ${showSection(rx, "gat") && (rx.gatRight || rx.gatLeft) ? `<div class="field">RE: <span class="val">${esc(rx.gatRight) || "—"}</span> &nbsp; LE: <span class="val">${esc(rx.gatLeft) || "—"}</span> <span class="small">mmHg</span></div>` : ""}
 
-  ${rx.drugs?.filter((d) => d.name).length ? drugsSection(rx.drugs) : ""}
+  ${showSection(rx, "drugs") && rx.drugs?.filter((d) => d.name).length ? drugsSection(rx.drugs) : ""}
 
-  ${(rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp) ? `
+  ${showSection(rx, "spectacle") && (rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeDistance?.va || rx.leftEyeDistance?.va || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp || rx.rightEyeNear?.va || rx.leftEyeNear?.va) ? `
   <table><tbody>
     ${rxBlock("Distance (D)", rx.rightEyeDistance, rx.leftEyeDistance)}
     ${rxBlock("Near (N)", rx.rightEyeNear, rx.leftEyeNear)}
   </tbody></table>
   ${rx.ipd ? `<div class="field small">IPD D: ${esc(rx.ipd)} mm${rx.nearIPD ? ` / N: ${esc(rx.nearIPD)} mm` : ""}</div>` : ""}` : ""}
 
-  ${lensOpts.length ? `<div class="field small">${lensOpts.join(" · ")}</div>` : ""}
+  ${showSection(rx, "lens") && lensOpts.length ? `<div class="field small">${lensOpts.join(" · ")}</div>` : ""}
 
-  ${rx.advice ? `<hr/><div class="field">${rx.adviceBn ? `<span class="bn val">${esc(rx.adviceBn)}</span>` : `<span class="val">${esc(rx.advice)}</span>`}</div>` : ""}
+  ${showSection(rx, "advice") && rx.advice ? `<hr/><div class="field">${rx.adviceBn ? `<span class="bn val">${esc(rx.adviceBn)}</span>` : `<span class="val">${esc(rx.advice)}</span>`}</div>` : ""}
 
-  ${rx.followUp ? `<div class="field">${rx.followUpBn && rx.followUpBn !== rx.followUp ? `<span class="bn val">${esc(rx.followUpBn)}</span>` : `<span class="val">${esc(rx.followUp)}</span>`}</div>` : ""}
+  ${showSection(rx, "followUp") && rx.followUp ? `<div class="field">${rx.followUpBn && rx.followUpBn !== rx.followUp ? `<span class="bn val">${esc(rx.followUpBn)}</span>` : `<span class="val">${esc(rx.followUp)}</span>`}</div>` : ""}
+
+  ${customSectionsHTML(rx)}
 </div>
 </body>
 </html>`;

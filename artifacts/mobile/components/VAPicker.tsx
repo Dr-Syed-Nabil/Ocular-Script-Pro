@@ -24,15 +24,16 @@ interface Props {
   fieldLabel: string;
   eyeLabel: string;
   includeNI?: boolean;
+  options?: string[];
 }
 
-export function VAPicker({ value, onChange, fieldLabel, eyeLabel, includeNI = false }: Props) {
+export function VAPicker({ value, onChange, fieldLabel, eyeLabel, includeNI = false, options: customOptions }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const s = styles(colors);
   const [open, setOpen] = useState(false);
 
-  const options = includeNI ? [...BASE_OPTIONS, ...EXTRA_OPTIONS] : BASE_OPTIONS;
+  const options = customOptions?.length ? customOptions : (includeNI ? [...BASE_OPTIONS, ...EXTRA_OPTIONS] : BASE_OPTIONS);
 
   const handleSelect = (opt: string) => {
     onChange(value === opt ? "" : opt);
