@@ -50,6 +50,12 @@ export interface PrescriptionSectionConfig {
   subsections?: PrescriptionSubsectionConfig[];
 }
 
+export interface ConfigurableFieldValue {
+  selectedOptions: string[];
+  freeText: string;
+  optionLateralities?: Record<string, ComplaintLaterality>;
+}
+
 export interface PrescriptionSubsectionConfig {
   id: string;
   title: string;
@@ -102,7 +108,7 @@ export interface Prescription {
   diagnosis?: string;
   investigations?: string;
   customSections?: CustomPrescriptionSection[];
-  sectionFields?: Record<string, { selectedOptions: string[]; freeText: string }>;
+  sectionFields?: Record<string, ConfigurableFieldValue>;
   sectionTitles?: Record<string, string>;
   subsectionTitles?: Record<string, string>;
   hiddenSections?: string[];

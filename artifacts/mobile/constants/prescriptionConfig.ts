@@ -1,7 +1,65 @@
 import { PrescriptionConfig, PrescriptionSectionConfig, PrescriptionSubsectionConfig } from "@/types";
 
+export const INVESTIGATION_GROUPS = [
+  {
+    title: "Blood work",
+    options: [
+      "CBC",
+      "RBS",
+      "FBS",
+      "2hrABF",
+      "HbA1c",
+      "S. Creatinine",
+      "CRP",
+      "S. Lysozyme",
+      "Fasting lipid profile",
+      "TSH, FT3, FT4",
+      "HbsAg",
+      "BT, CT",
+      "PT",
+      "APTT",
+    ],
+  },
+  {
+    title: "Radiology",
+    options: [
+      "CXR-PA",
+      "X-Ray of the Orbits AP View and Lateral View looking up & down",
+      "X-Ray PNS OM View",
+      "CT of Head & Orbits",
+      "MRI of Brain and Orbits",
+      "MRA",
+      "MRV",
+    ],
+  },
+  {
+    title: "Ophthalmic",
+    options: [
+      "CFP",
+      "FFA",
+      "ICGA",
+      "FAF",
+      "OCT-Macula",
+      "OCT-Optic Disc",
+      "HVFA 30-2",
+      "HVFA 24-2",
+      "HVFA 10-2",
+      "Biometry",
+      "B-Scan",
+      "Hess Chart",
+      "AS-OCT",
+      "UBM",
+      "Dry Eye Analysis",
+      "Pentacam",
+      "Specular Biomicroscopy",
+    ],
+  },
+] as const;
+
+export const DEFAULT_INVESTIGATION_OPTIONS = INVESTIGATION_GROUPS.flatMap((group) => [...group.options]);
+
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
-  version: 5,
+  version: 6,
   chiefComplaints: [
     "DOV",
     "Double Vision",
@@ -55,7 +113,7 @@ export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
     { id: "drugs", title: "Treatment (Rx)", enabled: true, builtIn: true },
     { id: "spectacle", title: "Spectacle Correction", enabled: true, builtIn: true },
     { id: "lens", title: "Lens Options", enabled: true, builtIn: true },
-    { id: "investigations", title: "Investigations", enabled: true, builtIn: true, options: [] },
+    { id: "investigations", title: "Investigations", enabled: true, builtIn: true, options: DEFAULT_INVESTIGATION_OPTIONS },
     {
       id: "advice",
       title: "Advice/উপদেশ",
@@ -148,6 +206,8 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
     const savedOptions = saved?.options;
     const options = fallback.id === "advice" && (!input.version || input.version < 4)
       ? cleanOptions([...(fallback.options || []), ...(Array.isArray(savedOptions) ? savedOptions : [])], fallback.options || [])
+      : fallback.id === "investigations" && (!input.version || input.version < 6)
+        ? cleanOptions([...(fallback.options || []), ...(Array.isArray(savedOptions) ? savedOptions : [])], fallback.options || [])
       : cleanOptions(savedOptions, fallback.options || []);
     const savedTitle = typeof saved?.title === "string" && saved.title.trim() ? saved.title.trim() : "";
     const title = input.version && input.version < 5 && legacyTitles[fallback.id]?.includes(savedTitle)

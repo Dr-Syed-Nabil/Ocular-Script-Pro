@@ -9,6 +9,7 @@ import {
   Platform,
   StatusBar,
   StyleSheet,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -40,7 +41,9 @@ import {
   PastHistory,
   Patient,
   CustomPrescriptionSection,
+  ConfigurableFieldValue,
 } from "@/types";
+import { INVESTIGATION_GROUPS } from "@/constants/prescriptionConfig";
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 
@@ -131,14 +134,129 @@ function ToggleGroup({ options, value, onChange, multi }: { options: string[]; v
   );
 }
 
-type ConfigurableFieldValue = { selectedOptions: string[]; freeText: string };
-
 function configurableFieldText(value: ConfigurableFieldValue): string {
-  return [...value.selectedOptions, value.freeText.trim()].filter(Boolean).join(", ");
+  const selected = value.selectedOptions.map((option) => {
+    const laterality = value.optionLateralities?.[option];
+    return laterality ? `${option} (${laterality})` : option;
+  });
+  return [...selected, value.freeText.trim()].filter(Boolean).join(", ");
+}
+
+const OPHTHALMIC_INVESTIGATIONS: Set<string> = new Set<string>(
+  INVESTIGATION_GROUPS.find((group) => group.title === "Ophthalmic")?.options || [],
+);
+
+function InvestigationDropdown({
+  options,
+  groups,
+  value,
+  onChange,
+}: {
+  options: string[];
+  groups: readonly { title: string; options: readonly string[] }[];
+  value: ConfigurableFieldValue;
+  onChange: (value: ConfigurableFieldValue) => void;
+}) {
+  const colors = useColors();
+  const s = styles(colors);
+  const [open, setOpen] = useState(false);
+  const groupedOptions = new Set(groups.flatMap((group) => group.options));
+  const extraOptions = options.filter((option) => !groupedOptions.has(option));
+
+  const toggleOption = (option: string) => {
+    const selected = value.selectedOptions.includes(option);
+    const nextLateralities = { ...(value.optionLateralities || {}) };
+    if (selected) delete nextLateralities[option];
+    onChange({
+      ...value,
+      selectedOptions: selected
+        ? value.selectedOptions.filter((item) => item !== option)
+        : [...value.selectedOptions, option],
+      optionLateralities: nextLateralities,
+    });
+  };
+
+  const chooseLaterality = (option: string, side: ComplaintLaterality) => {
+    onChange({
+      ...value,
+      optionLateralities: { ...(value.optionLateralities || {}), [option]: side },
+    });
+  };
+
+  const renderOption = (option: string) => {
+    const selected = value.selectedOptions.includes(option);
+    const ophthalmic = OPHTHALMIC_INVESTIGATIONS.has(option);
+    return (
+      <View key={option} style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <TouchableOpacity
+          style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 }}
+          onPress={() => toggleOption(option)}
+          activeOpacity={0.7}
+        >
+          <View style={[s.checkbox, selected && s.checkboxSelected]}>
+            {selected && <Feather name="check" size={12} color="#fff" />}
+          </View>
+          <Text style={[s.dropdownOptionText, selected && s.dropdownOptionTextSelected]}>{option}</Text>
+        </TouchableOpacity>
+        {selected && ophthalmic ? (
+          <View style={{ paddingHorizontal: 42, paddingBottom: 10 }}>
+            <Text style={s.dropdownPrompt}>Choose eye side</Text>
+            <View style={s.lateralityGroup}>
+              {LATERALITIES.map((side) => (
+                <TouchableOpacity
+                  key={side}
+                  style={[s.lateralityButton, value.optionLateralities?.[option] === side && s.lateralityButtonSelected]}
+                  onPress={() => chooseLaterality(option, side)}
+                >
+                  <Text style={[s.lateralityText, value.optionLateralities?.[option] === side && s.lateralityTextSelected]}>{side}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  return (
+    <View style={{ gap: 8 }}>
+      <TouchableOpacity
+        style={s.investigationSelect}
+        onPress={() => setOpen((current) => !current)}
+        activeOpacity={0.8}
+      >
+        <Text style={value.selectedOptions.length ? s.investigationSelectText : s.investigationSelectPlaceholder} numberOfLines={2}>
+          {value.selectedOptions.length
+            ? `${value.selectedOptions.length} investigation${value.selectedOptions.length === 1 ? "" : "s"} selected`
+            : "Select investigations…"}
+        </Text>
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedForeground} />
+      </TouchableOpacity>
+      {open ? (
+        <View style={s.investigationMenu}>
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 330 }}>
+            {groups.map((group) => (
+              <View key={group.title}>
+                <Text style={s.investigationGroupTitle}>{group.title}</Text>
+                {group.options.filter((option) => options.includes(option)).map(renderOption)}
+              </View>
+            ))}
+            {extraOptions.length ? (
+              <View>
+                <Text style={s.investigationGroupTitle}>Other saved options</Text>
+                {extraOptions.map(renderOption)}
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function ConfigurableTextField({
   options,
+  optionGroups,
   value,
   onChange,
   fieldKey,
@@ -146,6 +264,7 @@ function ConfigurableTextField({
   minHeight = 64,
 }: {
   options: string[];
+  optionGroups?: readonly { title: string; options: readonly string[] }[];
   value: ConfigurableFieldValue;
   onChange: (value: ConfigurableFieldValue) => void;
   fieldKey: string;
@@ -154,7 +273,9 @@ function ConfigurableTextField({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      {options.length ? (
+      {optionGroups ? (
+        <InvestigationDropdown options={options} groups={optionGroups} value={value} onChange={onChange} />
+      ) : options.length ? (
         <ToggleGroup
           options={options}
           value={value.selectedOptions}
@@ -751,6 +872,13 @@ export default function NewRxScreen() {
       const diagnosisField = getSectionField("diagnosis", diagnosis);
       const investigationsField = getSectionField("investigations", investigations);
       const adviceField = getSectionField("advice", advice);
+      const incompleteInvestigation = investigationsField.selectedOptions.find(
+        (option) => OPHTHALMIC_INVESTIGATIONS.has(option) && !investigationsField.optionLateralities?.[option],
+      );
+      if (incompleteInvestigation) {
+        Alert.alert("Select an eye side", `Choose R, L, or B for ${incompleteInvestigation}.`);
+        return;
+      }
       if (adnexaField.freeText.trim()) adnexaSugg.add(adnexaField.freeText);
       if (anteriorField.freeText.trim()) anteriorSugg.add(anteriorField.freeText);
       if (posteriorField.freeText.trim()) posteriorSugg.add(posteriorField.freeText);
@@ -1319,6 +1447,7 @@ export default function NewRxScreen() {
         <ConfigurableTextField
           fieldKey="investigations"
           options={prescriptionConfig.sections.find((section) => section.id === "investigations")?.options || []}
+          optionGroups={INVESTIGATION_GROUPS}
           value={getSectionField("investigations", investigations)}
           onChange={(value) => {
             updateSectionField("investigations", value);
@@ -1454,6 +1583,14 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     lateralityButtonSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
     lateralityText: { fontSize: 11, color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
     lateralityTextSelected: { color: "#fff" },
+    investigationSelect: { minHeight: 48, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card, paddingHorizontal: 13, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    investigationSelectText: { flex: 1, fontSize: 14, color: colors.foreground, fontFamily: "Inter_500Medium", paddingRight: 8 },
+    investigationSelectPlaceholder: { flex: 1, fontSize: 14, color: colors.mutedForeground, fontFamily: "Inter_400Regular", paddingRight: 8 },
+    investigationMenu: { borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: "hidden" },
+    investigationGroupTitle: { paddingHorizontal: 12, paddingTop: 11, paddingBottom: 7, backgroundColor: colors.secondary, color: colors.primary, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.7 },
+    dropdownOptionText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.foreground, fontFamily: "Inter_400Regular" },
+    dropdownOptionTextSelected: { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+    dropdownPrompt: { fontSize: 10, color: colors.mutedForeground, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 5 },
     customComplaintBlock: { paddingTop: 14 },
     doneButton: { marginTop: 10, borderRadius: 13, backgroundColor: colors.primary, alignItems: "center", paddingVertical: 14 },
     doneButtonText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
