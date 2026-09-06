@@ -1,7 +1,7 @@
 import { PrescriptionConfig, PrescriptionSectionConfig, PrescriptionSubsectionConfig } from "@/types";
 
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
-  version: 3,
+  version: 4,
   chiefComplaints: [
     "DOV",
     "Double Vision",
@@ -54,7 +54,26 @@ export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
     { id: "drugs", title: "Rx — Drugs & Medications", enabled: true, builtIn: true },
     { id: "spectacle", title: "Spectacle Correction", enabled: true, builtIn: true },
     { id: "lens", title: "Lens Options", enabled: true, builtIn: true },
-    { id: "advice", title: "Advice (উপদেশ)", enabled: true, builtIn: true, options: [] },
+    {
+      id: "advice",
+      title: "Advice (উপদেশ)",
+      enabled: true,
+      builtIn: true,
+      options: [
+        "নিয়মিত ঔষধ ব্যবহার করবেন।",
+        "দেখানো নিয়মে ব্যায়াম করবেন।",
+        "দেখানো নিয়মে আলতো ভাবে গরম সেঁক দিবেন, ১৫-২০ মিঃ করে, দিনে ৪/৫ বার।",
+        "বেশী শ্যাম্পু দিয়ে চোখের পাতা এবং পাপড়ি পরিষ্কার করবেন।",
+        "চোখে পানি লাগাবেন না পরবর্তী নির্দেশনা না দেয়া পর্যন্ত।",
+        "চোখে পানি লাগাবেন না ৭ দিন।",
+        "চোখে পানি লাগাবেন না ১৫ দিন।",
+        "চোখের ময়লা/পিঁচুটি/কেতর ঔষধ দিয়ে নিয়মিত পরিষ্কার করবেন।",
+        "সবসময় চশমা পরতে হবে, শুধুমাত্র গোসল ও ঘুমানোর সময় চশমা খোলা যাবে।",
+        "মোবাইল/টিভি/কম্পিউটার বা যেকোনো ডিজিটাল স্ক্রিন টানা ৪০মিঃ ব্যবহারের পর ৫-১০মিঃ বিরতি দিতে হবে।",
+        "মোবাইল/টিভি/কম্পিউটার বা যেকোনো ডিজিটাল স্ক্রিন ব্যবহার সীমিত করতে হবে।",
+        "অন্ধকারে মোবাইল/টিভি/কম্পিউটার বা যেকোনো ডিজিটাল স্ক্রিন ব্যবহার পুরোপুরি বন্ধ করতে হবে।",
+      ],
+    },
     { id: "followUp", title: "Follow-up (পরবর্তী ভিজিট)", enabled: true, builtIn: true },
   ],
 };
@@ -112,6 +131,10 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
   const rawSections = Array.isArray(input.sections) ? input.sections : [];
   const sections = DEFAULT_PRESCRIPTION_CONFIG.sections.map((fallback) => {
     const saved = rawSections.find((section) => section?.id === fallback.id);
+    const savedOptions = saved?.options;
+    const options = fallback.id === "advice" && input.version !== DEFAULT_PRESCRIPTION_CONFIG.version
+      ? cleanOptions([...(fallback.options || []), ...(Array.isArray(savedOptions) ? savedOptions : [])], fallback.options || [])
+      : cleanOptions(savedOptions, fallback.options || []);
     return {
       ...fallback,
       ...(saved && typeof saved === "object" ? saved : {}),
@@ -119,7 +142,7 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
       builtIn: true,
       title: typeof saved?.title === "string" && saved.title.trim() ? saved.title.trim() : fallback.title,
       enabled: saved?.enabled !== false,
-      options: cleanOptions(saved?.options, fallback.options || []),
+      options,
       subsections: normalizeSubsections(fallback.subsections, saved?.subsections),
     };
   });
