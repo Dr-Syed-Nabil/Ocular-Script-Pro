@@ -82,7 +82,7 @@ function customSectionsHTML(rx: Prescription): string {
     .map((section) => `
       <div class="section">
         <div class="sec-title">${esc(section.title)}</div>
-        <div class="sec-body"><p class="advice-en">${esc(section.content)}</p></div>
+        <div class="sec-body"><p class="advice-en">${esc(section.content).replace(/\n/g, "<br/>")}</p></div>
       </div>`)
     .join("");
 }
@@ -252,9 +252,9 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
     <div class="sec-title">${esc(sectionTitle(rx, "examination", "Examination Findings"))}</div>
     <div class="sec-body">
       <table class="exam-table"><tbody>
-        ${rx.adnexa ? `<tr><td class="exam-lbl">Adnexa</td><td>${esc(rx.adnexa)}</td></tr>` : ""}
-        ${rx.anteriorSegment ? `<tr><td class="exam-lbl">Anterior Segment</td><td>${esc(rx.anteriorSegment)}</td></tr>` : ""}
-        ${rx.posteriorSegment ? `<tr><td class="exam-lbl">Posterior Segment</td><td>${esc(rx.posteriorSegment)}</td></tr>` : ""}
+        ${rx.adnexa ? `<tr><td class="exam-lbl">${esc(rx.subsectionTitles?.["examination:adnexa"] || "Adnexa")}</td><td>${esc(rx.adnexa)}</td></tr>` : ""}
+        ${rx.anteriorSegment ? `<tr><td class="exam-lbl">${esc(rx.subsectionTitles?.["examination:anteriorSegment"] || "Anterior Segment")}</td><td>${esc(rx.anteriorSegment)}</td></tr>` : ""}
+        ${rx.posteriorSegment ? `<tr><td class="exam-lbl">${esc(rx.subsectionTitles?.["examination:posteriorSegment"] || "Posterior Segment")}</td><td>${esc(rx.posteriorSegment)}</td></tr>` : ""}
       </tbody></table>
     </div>
   </div>` : ""}
@@ -302,7 +302,7 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   <!-- Advice -->
   ${showSection(rx, "advice") && rx.advice ? `
   <div class="section">
-    <div class="sec-title">উপদেশ / Advice</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "advice", "উপদেশ / Advice"))}</div>
     <div class="sec-body">
       <div class="advice-en">${esc(rx.advice)}</div>
       ${rx.adviceBn ? `<div class="advice-bn">${esc(rx.adviceBn)}</div>` : ""}
@@ -312,7 +312,7 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   <!-- Follow-up -->
   ${showSection(rx, "followUp") && rx.followUp ? `
   <div class="section">
-    <div class="sec-title">পরবর্তী ভিজিট / Follow-up</div>
+    <div class="sec-title">${esc(sectionTitle(rx, "followUp", "পরবর্তী ভিজিট / Follow-up"))}</div>
     <div class="sec-body">
       <div class="followup">📅 ${esc(rx.followUp)}</div>
       ${rx.followUpBn && rx.followUpBn !== rx.followUp ? `<div class="followup-bn">${esc(rx.followUpBn)}</div>` : ""}

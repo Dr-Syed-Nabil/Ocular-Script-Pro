@@ -391,9 +391,9 @@ export default function PrescriptionDetailScreen() {
         {sectionEnabled("examination") && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) && (
           <SectionBlock title={sectionTitle("examination", "Examination Findings")}>
             <InfoCard>
-              <LabelValue label="Adnexa" value={rx.adnexa} />
-              <LabelValue label="Anterior Segment" value={rx.anteriorSegment} />
-              <LabelValue label="Posterior Segment" value={rx.posteriorSegment} />
+              <LabelValue label={rx.subsectionTitles?.["examination:adnexa"] || "Adnexa"} value={rx.adnexa} />
+              <LabelValue label={rx.subsectionTitles?.["examination:anteriorSegment"] || "Anterior Segment"} value={rx.anteriorSegment} />
+              <LabelValue label={rx.subsectionTitles?.["examination:posteriorSegment"] || "Posterior Segment"} value={rx.posteriorSegment} />
             </InfoCard>
           </SectionBlock>
         )}

@@ -14,9 +14,9 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
-import { PrescriptionConfig, PrescriptionSectionConfig } from "@/types";
+import { PrescriptionConfig, PrescriptionSectionConfig, PrescriptionSubsectionConfig } from "@/types";
 
-type OptionKey = Exclude<keyof PrescriptionConfig, "sections">;
+type OptionKey = Exclude<keyof PrescriptionConfig, "sections" | "version">;
 
 function OptionEditor({
   title,
@@ -35,10 +35,6 @@ function OptionEditor({
     onChange(options.map((item, itemIndex) => itemIndex === index ? value : item));
   };
   const remove = (index: number) => {
-    if (options.length === 1) {
-      Alert.alert("Keep one option", "Each picker needs at least one option.");
-      return;
-    }
     onChange(options.filter((_, itemIndex) => itemIndex !== index));
   };
   const add = () => {
@@ -94,8 +90,18 @@ function SectionEditor({
 }) {
   const colors = useColors();
   const [newSection, setNewSection] = useState("");
+  const [newSubsections, setNewSubsections] = useState<Record<string, string>>({});
   const update = (id: string, patch: Partial<PrescriptionSectionConfig>) =>
     onChange(sections.map((section) => section.id === id ? { ...section, ...patch } : section));
+  const updateSubsection = (sectionId: string, subsectionId: string, patch: Partial<PrescriptionSubsectionConfig>) =>
+    onChange(sections.map((section) => section.id === sectionId
+      ? {
+          ...section,
+          subsections: (section.subsections || []).map((subsection) =>
+            subsection.id === subsectionId ? { ...subsection, ...patch } : subsection
+          ),
+        }
+      : section));
   const add = () => {
     const title = newSection.trim();
     if (!title || sections.some((section) => section.title.toLowerCase() === title.toLowerCase())) return;
@@ -104,8 +110,28 @@ function SectionEditor({
       title,
       enabled: true,
       builtIn: false,
+      options: [],
+      subsections: [],
     }]);
     setNewSection("");
+  };
+  const addSubsection = (sectionId: string) => {
+    const title = (newSubsections[sectionId] || "").trim();
+    const section = sections.find((item) => item.id === sectionId);
+    if (!title || section?.subsections?.some((item) => item.title.toLowerCase() === title.toLowerCase())) return;
+    update(sectionId, {
+      subsections: [
+        ...(section?.subsections || []),
+        { id: `sub-${Date.now().toString(36)}`, title, enabled: true, builtIn: false, options: [] },
+      ],
+    });
+    setNewSubsections((current) => ({ ...current, [sectionId]: "" }));
+  };
+  const removeSubsection = (sectionId: string, subsectionId: string) => {
+    const section = sections.find((item) => item.id === sectionId);
+    update(sectionId, {
+      subsections: (section?.subsections || []).filter((item) => item.id !== subsectionId),
+    });
   };
   const remove = (id: string) => {
     Alert.alert("Delete section", "This removes the section from future prescriptions. Existing prescriptions stay unchanged.", [
@@ -118,31 +144,91 @@ function SectionEditor({
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <Text style={[styles.cardTitle, { color: colors.foreground }]}>Prescription sections</Text>
       <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>
-        Rename sections, hide sections you do not use, or create your own free-text section.
+        Rename sections, edit sub-sections, add picker options, or create your own configurable section.
       </Text>
       {sections.map((section) => (
-        <View key={section.id} style={[styles.sectionRow, { borderBottomColor: colors.border }]}>
-          <TextInput
-            style={[styles.sectionInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
-            value={section.title}
-            onChangeText={(title) => update(section.id, { title })}
-            editable={!section.builtIn || section.id !== "patient"}
-            placeholder="Section title"
-            placeholderTextColor={colors.mutedForeground}
-          />
-          <TouchableOpacity
-            style={[styles.visibilityButton, { borderColor: section.enabled ? colors.primary : colors.border, backgroundColor: section.enabled ? colors.secondary : colors.surface }]}
-            onPress={() => {
-              if (section.id !== "patient") update(section.id, { enabled: !section.enabled });
-            }}
-            disabled={section.id === "patient"}
-          >
-            <Feather name={section.enabled ? "eye" : "eye-off"} size={15} color={section.enabled ? colors.primary : colors.mutedForeground} />
-          </TouchableOpacity>
-          {!section.builtIn ? (
-            <TouchableOpacity onPress={() => remove(section.id)} style={styles.deleteButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Feather name="trash-2" size={16} color={colors.destructive} />
+        <View key={section.id} style={[styles.sectionCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <View style={[styles.sectionRow, { borderBottomColor: colors.border }]}>
+            <TextInput
+              style={[styles.sectionInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+              value={section.title}
+              onChangeText={(title) => update(section.id, { title })}
+              editable={!section.builtIn || section.id !== "patient"}
+              placeholder="Section title"
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <TouchableOpacity
+              style={[styles.visibilityButton, { borderColor: section.enabled ? colors.primary : colors.border, backgroundColor: section.enabled ? colors.secondary : colors.card }]}
+              onPress={() => {
+                if (section.id !== "patient") update(section.id, { enabled: !section.enabled });
+              }}
+              disabled={section.id === "patient"}
+            >
+              <Feather name={section.enabled ? "eye" : "eye-off"} size={15} color={section.enabled ? colors.primary : colors.mutedForeground} />
             </TouchableOpacity>
+            {!section.builtIn ? (
+              <TouchableOpacity onPress={() => remove(section.id)} style={styles.deleteButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Feather name="trash-2" size={16} color={colors.destructive} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {section.id === "advice" || !section.builtIn ? (
+            <OptionEditor
+              title={`${section.title} options`}
+              description="Selectable choices shown above the free-text box."
+              options={section.options || []}
+              onChange={(options) => update(section.id, { options })}
+            />
+          ) : null}
+
+          {section.id === "examination" || !section.builtIn ? (
+            <View style={styles.subsectionArea}>
+              <Text style={[styles.subsectionHeading, { color: colors.foreground }]}>Sub-sections</Text>
+              {(section.subsections || []).map((subsection) => (
+                <View key={subsection.id} style={[styles.subsectionCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                  <View style={styles.sectionRow}>
+                    <TextInput
+                      style={[styles.sectionInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+                      value={subsection.title}
+                      onChangeText={(title) => updateSubsection(section.id, subsection.id, { title })}
+                      placeholder="Sub-section title"
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                    <TouchableOpacity
+                      style={[styles.visibilityButton, { borderColor: subsection.enabled ? colors.primary : colors.border, backgroundColor: subsection.enabled ? colors.secondary : colors.surface }]}
+                      onPress={() => updateSubsection(section.id, subsection.id, { enabled: !subsection.enabled })}
+                    >
+                      <Feather name={subsection.enabled ? "eye" : "eye-off"} size={15} color={subsection.enabled ? colors.primary : colors.mutedForeground} />
+                    </TouchableOpacity>
+                    {!subsection.builtIn ? (
+                      <TouchableOpacity onPress={() => removeSubsection(section.id, subsection.id)} style={styles.deleteButton}>
+                        <Feather name="trash-2" size={16} color={colors.destructive} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <OptionEditor
+                    title={`${subsection.title} options`}
+                    description="Selectable choices; free text remains available."
+                    options={subsection.options}
+                    onChange={(options) => updateSubsection(section.id, subsection.id, { options })}
+                  />
+                </View>
+              ))}
+              <View style={styles.addRow}>
+                <TextInput
+                  style={[styles.optionInput, { flex: 1, color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+                  value={newSubsections[section.id] || ""}
+                  onChangeText={(value) => setNewSubsections((current) => ({ ...current, [section.id]: value }))}
+                  placeholder="Add a sub-section"
+                  placeholderTextColor={colors.mutedForeground}
+                  onSubmitEditing={() => addSubsection(section.id)}
+                />
+                <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.secondary }]} onPress={() => addSubsection(section.id)}>
+                  <Feather name="plus" size={17} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
           ) : null}
         </View>
       ))}
@@ -255,8 +341,12 @@ const styles = StyleSheet.create({
   deleteButton: { width: 28, alignItems: "center" },
   addRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingTop: 10 },
   addButton: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  sectionCard: { borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 10 },
   sectionRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, borderBottomWidth: 1 },
   sectionInput: { flex: 1, borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, fontFamily: "Inter_400Regular" },
   visibilityButton: { width: 34, height: 34, borderRadius: 9, borderWidth: 1.2, alignItems: "center", justifyContent: "center" },
+  subsectionArea: { paddingTop: 10 },
+  subsectionHeading: { fontSize: 12, fontFamily: "Inter_700Bold", marginBottom: 6 },
+  subsectionCard: { borderWidth: 1, borderRadius: 10, padding: 8, marginBottom: 8 },
   lockedHint: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 9 },
 });

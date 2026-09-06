@@ -1,7 +1,7 @@
-import { PrescriptionConfig } from "@/types";
+import { PrescriptionConfig, PrescriptionSectionConfig, PrescriptionSubsectionConfig } from "@/types";
 
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
-  version: 2,
+  version: 3,
   chiefComplaints: [
     "DOV",
     "Double Vision",
@@ -39,12 +39,22 @@ export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
     { id: "chiefComplaints", title: "Chief Complaints", enabled: true, builtIn: true },
     { id: "pastHistory", title: "Past History", enabled: true, builtIn: true },
     { id: "visualAcuity", title: "Visual Acuity", enabled: true, builtIn: true },
-    { id: "examination", title: "Examination Findings", enabled: true, builtIn: true },
+    {
+      id: "examination",
+      title: "Examination Findings",
+      enabled: true,
+      builtIn: true,
+      subsections: [
+        { id: "adnexa", title: "Adnexa", enabled: true, builtIn: true, options: [] },
+        { id: "anteriorSegment", title: "Anterior Segment", enabled: true, builtIn: true, options: [] },
+        { id: "posteriorSegment", title: "Posterior Segment", enabled: true, builtIn: true, options: [] },
+      ],
+    },
     { id: "gat", title: "GAT / Intraocular Pressure", enabled: true, builtIn: true },
     { id: "drugs", title: "Rx — Drugs & Medications", enabled: true, builtIn: true },
     { id: "spectacle", title: "Spectacle Correction", enabled: true, builtIn: true },
     { id: "lens", title: "Lens Options", enabled: true, builtIn: true },
-    { id: "advice", title: "Advice (উপদেশ)", enabled: true, builtIn: true },
+    { id: "advice", title: "Advice (উপদেশ)", enabled: true, builtIn: true, options: [] },
     { id: "followUp", title: "Follow-up (পরবর্তী ভিজিট)", enabled: true, builtIn: true },
   ],
 };
@@ -62,6 +72,41 @@ function cleanOptions(value: unknown, fallback: string[]): string[] {
   return result;
 }
 
+function normalizeSubsections(
+  fallback: PrescriptionSubsectionConfig[] = [],
+  savedValue: unknown,
+): PrescriptionSubsectionConfig[] {
+  const saved = Array.isArray(savedValue) ? savedValue : [];
+  const result = fallback.map((defaultSubsection) => {
+    const savedSubsection = saved.find((item) => item?.id === defaultSubsection.id);
+    return {
+      ...defaultSubsection,
+      ...(savedSubsection && typeof savedSubsection === "object" ? savedSubsection : {}),
+      id: defaultSubsection.id,
+      builtIn: true,
+      title: typeof savedSubsection?.title === "string" && savedSubsection.title.trim()
+        ? savedSubsection.title.trim()
+        : defaultSubsection.title,
+      enabled: savedSubsection?.enabled !== false,
+      options: cleanOptions(savedSubsection?.options, defaultSubsection.options),
+    };
+  });
+  saved
+    .filter((item) => item && typeof item === "object" && item.id && !result.some((subsection) => subsection.id === item.id))
+    .forEach((item) => {
+      if (typeof item.title === "string" && item.title.trim()) {
+        result.push({
+          id: String(item.id),
+          title: item.title.trim(),
+          enabled: item.enabled !== false,
+          builtIn: false,
+          options: cleanOptions(item.options, []),
+        });
+      }
+    });
+  return result;
+}
+
 export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
   const input = (raw && typeof raw === "object" ? raw : {}) as Partial<PrescriptionConfig>;
   const rawSections = Array.isArray(input.sections) ? input.sections : [];
@@ -74,6 +119,8 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
       builtIn: true,
       title: typeof saved?.title === "string" && saved.title.trim() ? saved.title.trim() : fallback.title,
       enabled: saved?.enabled !== false,
+      options: cleanOptions(saved?.options, fallback.options || []),
+      subsections: normalizeSubsections(fallback.subsections, saved?.subsections),
     };
   });
   rawSections
@@ -85,17 +132,19 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
           title: section.title.trim(),
           enabled: section.enabled !== false,
           builtIn: false,
+          options: cleanOptions(section.options, []),
+          subsections: normalizeSubsections([], section.subsections),
         });
       }
     });
 
   const savedChiefComplaints = cleanOptions(input.chiefComplaints, []);
-  const chiefComplaints = input.version === 2
+  const chiefComplaints = input.version === DEFAULT_PRESCRIPTION_CONFIG.version
     ? cleanOptions(savedChiefComplaints, DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints)
     : cleanOptions([...DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints, ...savedChiefComplaints], DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints);
 
   return {
-    version: 2,
+    version: DEFAULT_PRESCRIPTION_CONFIG.version,
     chiefComplaints,
     visualAcuity: cleanOptions(input.visualAcuity, DEFAULT_PRESCRIPTION_CONFIG.visualAcuity),
     distanceVA: cleanOptions(input.distanceVA, DEFAULT_PRESCRIPTION_CONFIG.distanceVA),

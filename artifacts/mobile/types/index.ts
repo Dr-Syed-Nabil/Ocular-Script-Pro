@@ -46,12 +46,24 @@ export interface PrescriptionSectionConfig {
   title: string;
   enabled: boolean;
   builtIn: boolean;
+  options?: string[];
+  subsections?: PrescriptionSubsectionConfig[];
+}
+
+export interface PrescriptionSubsectionConfig {
+  id: string;
+  title: string;
+  enabled: boolean;
+  builtIn: boolean;
+  options: string[];
 }
 
 export interface CustomPrescriptionSection {
   id: string;
   title: string;
   content: string;
+  selectedOptions?: string[];
+  freeText?: string;
 }
 
 export interface PrescriptionConfig {
@@ -84,7 +96,9 @@ export interface Prescription {
   customComplaint?: string;
   pastHistory: PastHistory;
   customSections?: CustomPrescriptionSection[];
+  sectionFields?: Record<string, { selectedOptions: string[]; freeText: string }>;
   sectionTitles?: Record<string, string>;
+  subsectionTitles?: Record<string, string>;
   hiddenSections?: string[];
 
   adnexa: string;

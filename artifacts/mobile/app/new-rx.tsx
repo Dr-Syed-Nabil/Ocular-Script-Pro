@@ -131,25 +131,82 @@ function ToggleGroup({ options, value, onChange, multi }: { options: string[]; v
   );
 }
 
+type ConfigurableFieldValue = { selectedOptions: string[]; freeText: string };
+
+function configurableFieldText(value: ConfigurableFieldValue): string {
+  return [...value.selectedOptions, value.freeText.trim()].filter(Boolean).join(", ");
+}
+
+function ConfigurableTextField({
+  options,
+  value,
+  onChange,
+  fieldKey,
+  placeholder,
+  minHeight = 64,
+}: {
+  options: string[];
+  value: ConfigurableFieldValue;
+  onChange: (value: ConfigurableFieldValue) => void;
+  fieldKey: string;
+  placeholder: string;
+  minHeight?: number;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      {options.length ? (
+        <ToggleGroup
+          options={options}
+          value={value.selectedOptions}
+          multi
+          onChange={(selectedOptions) => onChange({ ...value, selectedOptions: selectedOptions as string[] })}
+        />
+      ) : null}
+      <SmartInput
+        fieldKey={fieldKey}
+        value={value.freeText}
+        onChangeText={(freeText) => onChange({ ...value, freeText })}
+        placeholder={placeholder}
+        minHeight={minHeight}
+        multiline
+      />
+    </View>
+  );
+}
+
 /* ───────── VA Table ───────── */
 
-function VATable({ reVA, leVA, onChangeRe, onChangeLe, options }: {
+function VATable({ reVA, leVA, onChangeRe, onChangeLe, options, mode, onModeChange }: {
   reVA: EyeVA; leVA: EyeVA;
   onChangeRe: (f: keyof EyeVA, v: string) => void;
   onChangeLe: (f: keyof EyeVA, v: string) => void;
   options: string[];
+  mode: "ua" | "wa";
+  onModeChange: (mode: "ua" | "wa") => void;
 }) {
   const colors = useColors();
 
   const rows: { key: keyof EyeVA; label: string; ni?: boolean }[] = [
-    { key: "ua", label: "UA" },
-    { key: "wa", label: "WA" },
+    { key: mode, label: mode.toUpperCase() },
     { key: "ph", label: "PH", ni: true },
     { key: "bcva", label: "BCVA", ni: true },
   ];
 
   return (
     <View style={{ backgroundColor: colors.card, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
+      <View style={{ flexDirection: "row", gap: 8, padding: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        {(["ua", "wa"] as const).map((item) => (
+          <TouchableOpacity
+            key={item}
+            style={{ flex: 1, borderWidth: 1.5, borderColor: mode === item ? colors.primary : colors.border, borderRadius: 9, paddingVertical: 8, backgroundColor: mode === item ? colors.secondary : colors.surface }}
+            onPress={() => onModeChange(item)}
+          >
+            <Text style={{ textAlign: "center", fontSize: 12, fontFamily: "Inter_700Bold", color: mode === item ? colors.primary : colors.mutedForeground }}>
+              Fill {item.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       <View style={{ flexDirection: "row", backgroundColor: colors.secondary, paddingVertical: 8, paddingHorizontal: 10 }}>
         <View style={{ width: 52 }} />
         <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary, textAlign: "center" }}>RE (OD)</Text>
@@ -455,6 +512,7 @@ export default function NewRxScreen() {
 
   const [reVA, setReVA] = useState<EyeVA>(EMPTY_VA);
   const [leVA, setLeVA] = useState<EyeVA>(EMPTY_VA);
+  const [vaMode, setVaMode] = useState<"ua" | "wa">("ua");
 
   const [chiefComplaints, setChiefComplaints] = useState("");
   const [chiefComplaintSelections, setChiefComplaintSelections] = useState<ChiefComplaintSelection[]>([]);
@@ -505,6 +563,7 @@ export default function NewRxScreen() {
   const [followUp, setFollowUp] = useState("");
   const [followUpBn, setFollowUpBn] = useState("");
   const [customSections, setCustomSections] = useState<CustomPrescriptionSection[]>([]);
+  const [sectionFields, setSectionFields] = useState<Record<string, ConfigurableFieldValue>>({});
 
   const [saving, setSaving] = useState(false);
   const chiefComplaintOptions = useMemo(() => {
@@ -541,12 +600,18 @@ export default function NewRxScreen() {
     const patient = patients.find((p) => p.id === source.patientId);
     if (patient) { setSelectedPatient(patient); setPatientQuery(patient.name); }
     setPatientAge(source.patientAge);
-    setReVA(source.rightEyeVA); setLeVA(source.leftEyeVA);
+    const sourceVaMode = (source.rightEyeVA.wa || source.leftEyeVA.wa) && !(source.rightEyeVA.ua || source.leftEyeVA.ua) ? "wa" : "ua";
+    setVaMode(sourceVaMode);
+    setReVA({ ...source.rightEyeVA, [sourceVaMode === "ua" ? "wa" : "ua"]: "" });
+    setLeVA({ ...source.leftEyeVA, [sourceVaMode === "ua" ? "wa" : "ua"]: "" });
     setChiefComplaints(source.chiefComplaints);
     setChiefComplaintSelections(source.chiefComplaintSelections || []);
     setCustomComplaint(source.customComplaint || (!source.chiefComplaintSelections?.length ? source.chiefComplaints : ""));
     setHistory(source.pastHistory);
-    setAdnexa(source.adnexa); setAnteriorSegment(source.anteriorSegment); setPosteriorSegment(source.posteriorSegment);
+    setSectionFields(source.sectionFields || {});
+    setAdnexa(source.sectionFields?.["examination:adnexa"]?.freeText ?? source.adnexa);
+    setAnteriorSegment(source.sectionFields?.["examination:anteriorSegment"]?.freeText ?? source.anteriorSegment);
+    setPosteriorSegment(source.sectionFields?.["examination:posteriorSegment"]?.freeText ?? source.posteriorSegment);
     setGatRight(source.gatRight); setGatLeft(source.gatLeft);
     setDrugs(source.drugs.length ? source.drugs.map((d) => ({ ...d, id: newId() })) : [emptyDrug()]);
     setReD(source.rightEyeDistance); setLeD(source.leftEyeDistance);
@@ -554,7 +619,7 @@ export default function NewRxScreen() {
     setIpd(source.ipd); setAddValue(source.addValue || "");
     setLensUsage(source.lensUsage); setLensType(source.lensType);
     setLensCoating(source.lensCoating || []); setLensMaterial(source.lensMaterial);
-    setAdvice(source.advice); setAdviceBn(source.adviceBn);
+    setAdvice(source.sectionFields?.advice?.freeText ?? source.advice); setAdviceBn(source.adviceBn);
     setFollowUp(source.followUp); setFollowUpBn(source.followUpBn);
     setCustomSections(source.customSections || []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -564,12 +629,30 @@ export default function NewRxScreen() {
     prescriptionConfig.sections.find((section) => section.id === id)?.title || fallback;
   const sectionEnabled = (id: string) =>
     id === "patient" || prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false;
-  const updateCustomSection = (id: string, content: string) => {
+  const getSectionField = (key: string, fallback = ""): ConfigurableFieldValue =>
+    sectionFields[key] || { selectedOptions: [], freeText: fallback };
+  const updateSectionField = (key: string, value: ConfigurableFieldValue) =>
+    setSectionFields((current) => ({ ...current, [key]: value }));
+  const getCustomSectionField = (id: string): ConfigurableFieldValue => {
+    const existing = customSections.find((section) => section.id === id);
+    return {
+      selectedOptions: existing?.selectedOptions || [],
+      freeText: existing?.freeText ?? (existing?.selectedOptions?.length ? "" : existing?.content || ""),
+    };
+  };
+  const updateCustomSection = (id: string, value: ConfigurableFieldValue) => {
     setCustomSections((current) => {
       const existing = current.find((section) => section.id === id);
-      if (existing) return current.map((section) => section.id === id ? { ...section, content } : section);
+      const content = configurableFieldText(value);
+      if (existing) {
+        return current.map((section) => section.id === id
+          ? { ...section, content, selectedOptions: value.selectedOptions, freeText: value.freeText }
+          : section);
+      }
       const definition = prescriptionConfig.sections.find((section) => section.id === id);
-      return definition ? [...current, { id, title: definition.title, content }] : current;
+      return definition
+        ? [...current, { id, title: definition.title, content, selectedOptions: value.selectedOptions, freeText: value.freeText }]
+        : current;
     });
   };
 
@@ -639,27 +722,128 @@ export default function NewRxScreen() {
       if (!patient) return;
 
       // Auto-save suggestions
-      await saveCustomComplaintOption();
-      if (adnexa.trim()) adnexaSugg.add(adnexa);
-      if (anteriorSegment.trim()) anteriorSugg.add(anteriorSegment);
-      if (posteriorSegment.trim()) posteriorSugg.add(posteriorSegment);
-      if (advice.trim()) adviceSugg.add(advice);
+      if (customComplaint.trim()) ccSugg.add(customComplaint);
+      const adnexaField = getSectionField("examination:adnexa", adnexa);
+      const anteriorField = getSectionField("examination:anteriorSegment", anteriorSegment);
+      const posteriorField = getSectionField("examination:posteriorSegment", posteriorSegment);
+      const adviceField = getSectionField("advice", advice);
+      if (adnexaField.freeText.trim()) adnexaSugg.add(adnexaField.freeText);
+      if (anteriorField.freeText.trim()) anteriorSugg.add(anteriorField.freeText);
+      if (posteriorField.freeText.trim()) posteriorSugg.add(posteriorField.freeText);
+      if (adviceField.freeText.trim()) adviceSugg.add(adviceField.freeText);
       drugs.forEach((d) => { if (d.name) drugNameSugg.add(d.name); });
 
+      const appendOption = (options: string[] = [], value: string) => {
+        const trimmed = value.trim();
+        return !trimmed || options.some((item) => item.toLowerCase() === trimmed.toLowerCase())
+          ? options
+          : [...options, trimmed];
+      };
+      const learnedSections = prescriptionConfig.sections.map((section) => {
+        if (section.id === "examination") {
+          return {
+            ...section,
+            subsections: (section.subsections || []).map((subsection) => ({
+              ...subsection,
+              options: appendOption(
+                subsection.options,
+                getSectionField(
+                  `examination:${subsection.id}`,
+                  subsection.id === "adnexa" ? adnexa
+                    : subsection.id === "anteriorSegment" ? anteriorSegment
+                    : subsection.id === "posteriorSegment" ? posteriorSegment
+                    : ""
+                ).freeText
+              ),
+            })),
+          };
+        }
+        if (section.id === "advice") {
+          return { ...section, options: appendOption(section.options, adviceField.freeText) };
+        }
+        if (!section.builtIn) {
+          return {
+            ...section,
+            options: appendOption(section.options, getCustomSectionField(section.id).freeText),
+            subsections: (section.subsections || []).map((subsection) => ({
+              ...subsection,
+              options: appendOption(
+                subsection.options,
+                getSectionField(`custom:${section.id}:${subsection.id}`).freeText
+              ),
+            })),
+          };
+        }
+        return section;
+      });
+      await updatePrescriptionConfig({
+        ...prescriptionConfig,
+        chiefComplaints: appendOption(prescriptionConfig.chiefComplaints, customComplaint),
+        sections: learnedSections,
+      });
+
+      const finalAdnexa = configurableFieldText(adnexaField);
+      const finalAnteriorSegment = configurableFieldText(anteriorField);
+      const finalPosteriorSegment = configurableFieldText(posteriorField);
+      const finalAdvice = configurableFieldText(adviceField);
+      const savedCustomSections = prescriptionConfig.sections
+        .filter((section) => !section.builtIn && section.enabled)
+        .map((section) => {
+          const mainValue = getCustomSectionField(section.id);
+          const subsectionValues = (section.subsections || [])
+            .filter((subsection) => subsection.enabled)
+            .map((subsection) => ({
+              title: subsection.title,
+              content: configurableFieldText(getSectionField(`custom:${section.id}:${subsection.id}`)),
+            }))
+            .filter((subsection) => subsection.content);
+          const contentParts = [
+            configurableFieldText(mainValue),
+            ...subsectionValues.map((subsection) => `${subsection.title}: ${subsection.content}`),
+          ].filter(Boolean);
+          return {
+            id: section.id,
+            title: section.title,
+            content: contentParts.join("\n"),
+            selectedOptions: mainValue.selectedOptions,
+            freeText: mainValue.freeText,
+          };
+        })
+        .filter((section) => section.content);
+      const extraExaminationSections = (prescriptionConfig.sections.find((section) => section.id === "examination")?.subsections || [])
+        .filter((subsection) => !subsection.builtIn && subsection.enabled)
+        .map((subsection) => ({
+          id: `examination:${subsection.id}`,
+          title: subsection.title,
+          content: configurableFieldText(getSectionField(`examination:${subsection.id}`)),
+        }))
+        .filter((section) => section.content);
       const prescriptionData = {
         patientId: patient.id, patientName: patient.name, patientAge,
         date: new Date().toISOString().split("T")[0],
         rightEyeVA: reVA, leftEyeVA: leVA,
          chiefComplaints, chiefComplaintSelections, customComplaint: customComplaint.trim(), pastHistory: history,
-        adnexa, anteriorSegment, posteriorSegment,
+        adnexa: finalAdnexa, anteriorSegment: finalAnteriorSegment, posteriorSegment: finalPosteriorSegment,
         gatRight, gatLeft,
         drugs: drugs.filter((d) => d.name.trim()),
         rightEyeDistance: reD, leftEyeDistance: leD,
         rightEyeNear: reN, leftEyeNear: leN, ipd, nearIPD, addValue,
         lensUsage, lensType, lensCoating, lensMaterial,
-        advice, adviceBn, followUp, followUpBn,
-        customSections: customSections.filter((section) => section.content.trim()),
+        advice: finalAdvice, adviceBn, followUp, followUpBn,
+        customSections: [...savedCustomSections, ...extraExaminationSections],
+        sectionFields: {
+          ...sectionFields,
+          "examination:adnexa": adnexaField,
+          "examination:anteriorSegment": anteriorField,
+          "examination:posteriorSegment": posteriorField,
+          advice: adviceField,
+        },
         sectionTitles: Object.fromEntries(prescriptionConfig.sections.map((section) => [section.id, section.title])),
+        subsectionTitles: Object.fromEntries(
+          prescriptionConfig.sections.flatMap((section) =>
+            (section.subsections || []).map((subsection) => [`${section.id}:${subsection.id}`, subsection.title])
+          )
+        ),
         hiddenSections: prescriptionConfig.sections.filter((section) => !section.enabled).map((section) => section.id),
       };
       if (editId) {
@@ -916,20 +1100,50 @@ export default function NewRxScreen() {
           onChangeRe={(f, v) => setReVA((p) => ({ ...p, [f]: v }))}
           onChangeLe={(f, v) => setLeVA((p) => ({ ...p, [f]: v }))}
           options={prescriptionConfig.visualAcuity}
+          mode={vaMode}
+          onModeChange={(mode) => {
+            setVaMode(mode);
+            if (mode === "ua") {
+              setReVA((current) => ({ ...current, wa: "" }));
+              setLeVA((current) => ({ ...current, wa: "" }));
+            } else {
+              setReVA((current) => ({ ...current, ua: "" }));
+              setLeVA((current) => ({ ...current, ua: "" }));
+            }
+          }}
         />
         </> : null}
 
         {/* ─── Examination ─── */}
         {sectionEnabled("examination") ? <>
         <SectionTitle title={sectionTitle("examination", "Examination Findings")} />
-        <MiniLabel label="Adnexa" />
-        <SmartInput fieldKey="adnexa" value={adnexa} onChangeText={setAdnexa} placeholder="Eyelid, lacrimal, orbit…" minHeight={64} multiline />
-        <View style={{ height: 8 }} />
-        <MiniLabel label="Anterior Segment" />
-        <SmartInput fieldKey="anterior_segment" value={anteriorSegment} onChangeText={setAnteriorSegment} placeholder="Cornea, AC, iris, lens…" minHeight={80} multiline />
-        <View style={{ height: 8 }} />
-        <MiniLabel label="Posterior Segment" />
-        <SmartInput fieldKey="posterior_segment" value={posteriorSegment} onChangeText={setPosteriorSegment} placeholder="Vitreous, retina, disc, macula…" minHeight={80} multiline />
+        {(prescriptionConfig.sections.find((section) => section.id === "examination")?.subsections || [])
+          .filter((subsection) => subsection.enabled)
+          .map((subsection, index) => {
+            const fallback = subsection.id === "adnexa" ? adnexa
+              : subsection.id === "anteriorSegment" ? anteriorSegment
+              : subsection.id === "posteriorSegment" ? posteriorSegment
+              : "";
+            const value = getSectionField(`examination:${subsection.id}`, fallback);
+            return (
+              <View key={subsection.id} style={{ marginTop: index ? 10 : 0 }}>
+                <MiniLabel label={subsection.title} />
+                <ConfigurableTextField
+                  fieldKey={`examination_${subsection.id}`}
+                  options={subsection.options}
+                  value={value}
+                  onChange={(nextValue) => {
+                    updateSectionField(`examination:${subsection.id}`, nextValue);
+                    if (subsection.id === "adnexa") setAdnexa(nextValue.freeText);
+                    if (subsection.id === "anteriorSegment") setAnteriorSegment(nextValue.freeText);
+                    if (subsection.id === "posteriorSegment") setPosteriorSegment(nextValue.freeText);
+                  }}
+                  placeholder={`Enter ${subsection.title.toLowerCase()} findings…`}
+                  minHeight={subsection.id === "adnexa" ? 64 : 80}
+                />
+              </View>
+            );
+          })}
         </> : null}
 
         {/* ─── GAT ─── */}
@@ -994,22 +1208,45 @@ export default function NewRxScreen() {
         {prescriptionConfig.sections.filter((section) => !section.builtIn && section.enabled).map((section) => (
           <View key={section.id}>
             <SectionTitle title={section.title} />
-            <SmartInput
+            <ConfigurableTextField
               fieldKey={`custom_${section.id}`}
-              value={customSections.find((item) => item.id === section.id)?.content || ""}
-              onChangeText={(value) => updateCustomSection(section.id, value)}
+              options={section.options || []}
+              value={getCustomSectionField(section.id)}
+              onChange={(value) => updateCustomSection(section.id, value)}
               placeholder={`Enter ${section.title.toLowerCase()}…`}
               minHeight={90}
-              multiline
             />
+            {(section.subsections || []).filter((subsection) => subsection.enabled).map((subsection) => (
+              <View key={subsection.id} style={{ marginTop: 10 }}>
+                <MiniLabel label={subsection.title} />
+                <ConfigurableTextField
+                  fieldKey={`custom_${section.id}_${subsection.id}`}
+                  options={subsection.options}
+                  value={getSectionField(`custom:${section.id}:${subsection.id}`)}
+                  onChange={(value) => updateSectionField(`custom:${section.id}:${subsection.id}`, value)}
+                  placeholder={`Enter ${subsection.title.toLowerCase()}…`}
+                  minHeight={72}
+                />
+              </View>
+            ))}
           </View>
         ))}
 
         {/* ─── Advice ─── */}
         {sectionEnabled("advice") ? <>
         <SectionTitle title={sectionTitle("advice", "Advice (উপদেশ)")} />
-        <SmartInput fieldKey="advice" value={advice} onChangeText={(v) => { setAdvice(v); setAdviceBn(""); }}
-          placeholder="Instructions for the patient…" minHeight={100} multiline showTranslate />
+        <ConfigurableTextField
+          fieldKey="advice"
+          options={prescriptionConfig.sections.find((section) => section.id === "advice")?.options || []}
+          value={getSectionField("advice", advice)}
+          onChange={(value) => {
+            updateSectionField("advice", value);
+            setAdvice(value.freeText);
+            setAdviceBn("");
+          }}
+          placeholder="Instructions for the patient…"
+          minHeight={100}
+        />
         {!isAlreadyBangla(advice) && advice.trim() ? (
           <TouchableOpacity style={s.bnBtn}
             onPress={() => setAdviceBn(translateToBangla(advice))}>
