@@ -365,22 +365,33 @@ export default function PrescriptionDetailScreen() {
           <View style={{ flex: 1 }}>
             <Text style={s.metaName}>{rx.patientName}</Text>
             <Text style={s.metaSub}>
-              {rx.patientAge ? `Age: ${rx.patientAge}  ·  ` : ""}{formatDate(rx.date)}
+              {[
+                rx.patientAge ? `Age: ${rx.patientAge}` : "",
+                rx.patientWeight ? `Weight: ${rx.patientWeight}` : "",
+                formatDate(rx.date),
+              ].filter(Boolean).join("  ·  ")}
             </Text>
+            {rx.patientPhone ? <Text style={s.metaSub}>Contact: {rx.patientPhone}</Text> : null}
+            {rx.patientPuid ? <Text style={s.metaSub}>PUID: {rx.patientPuid}</Text> : null}
           </View>
         </View>
 
-        {/* Chief Complaints */}
-        {sectionEnabled("chiefComplaints") && rx.chiefComplaints ? (
-          <SectionBlock title={sectionTitle("chiefComplaints", "Chief Complaints")}>
-            <InfoCard><Text style={s.bodyText}>{rx.chiefComplaints}</Text></InfoCard>
-          </SectionBlock>
-        ) : null}
-
-        {/* Past History */}
-        {sectionEnabled("pastHistory") ? (
-          <SectionBlock title={sectionTitle("pastHistory", "Past History")}>
-            <InfoCard><HistoryBadges h={rx.pastHistory} /></InfoCard>
+        {/* History */}
+        {(sectionEnabled("chiefComplaints") || sectionEnabled("pastHistory"))
+          && (rx.chiefComplaints || rx.pastHistoryNotes || rx.pastHistory) ? (
+          <SectionBlock title={sectionTitle("pastHistory", "History")}>
+            {sectionEnabled("chiefComplaints") && rx.chiefComplaints ? (
+              <InfoCard>
+                <LabelValue label={sectionTitle("chiefComplaints", "Chief Complaints")} value={rx.chiefComplaints} />
+              </InfoCard>
+            ) : null}
+            {sectionEnabled("pastHistory") ? (
+              <InfoCard>
+                <Text style={s.gatLabel}>COMORBIDITIES</Text>
+                <HistoryBadges h={rx.pastHistory} />
+                <LabelValue label="Past History" value={rx.pastHistoryNotes || ""} />
+              </InfoCard>
+            ) : null}
           </SectionBlock>
         ) : null}
 
@@ -388,21 +399,15 @@ export default function PrescriptionDetailScreen() {
         {sectionEnabled("visualAcuity") ? <VASection reVA={rx.rightEyeVA} leVA={rx.leftEyeVA} title={sectionTitle("visualAcuity", "Visual Acuity")} /> : null}
 
         {/* Examination */}
-        {sectionEnabled("examination") && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) && (
-          <SectionBlock title={sectionTitle("examination", "Examination Findings")}>
+        {(sectionEnabled("examination") || sectionEnabled("gat"))
+          && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment || rx.gatRight || rx.gatLeft) && (
+          <SectionBlock title={sectionTitle("examination", "Other Examination Findings")}>
             <InfoCard>
               <LabelValue label={rx.subsectionTitles?.["examination:adnexa"] || "Adnexa"} value={rx.adnexa} />
               <LabelValue label={rx.subsectionTitles?.["examination:anteriorSegment"] || "Anterior Segment"} value={rx.anteriorSegment} />
               <LabelValue label={rx.subsectionTitles?.["examination:posteriorSegment"] || "Posterior Segment"} value={rx.posteriorSegment} />
-            </InfoCard>
-          </SectionBlock>
-        )}
-
-        {/* GAT */}
-        {sectionEnabled("gat") && (rx.gatRight || rx.gatLeft) && (
-          <SectionBlock title={sectionTitle("gat", "GAT / Intraocular Pressure")}>
-            <InfoCard>
-              <View style={{ flexDirection: "row", gap: 20 }}>
+              {sectionEnabled("gat") && (rx.gatRight || rx.gatLeft) ? (
+                <View style={{ flexDirection: "row", gap: 20, marginTop: 8 }}>
                 {rx.gatRight ? (
                   <View style={s.gatBlock}>
                     <Text style={s.gatLabel}>RE</Text>
@@ -416,13 +421,21 @@ export default function PrescriptionDetailScreen() {
                   </View>
                 ) : null}
               </View>
+              ) : null}
             </InfoCard>
           </SectionBlock>
         )}
 
+        {/* Diagnosis */}
+        {sectionEnabled("diagnosis") && rx.diagnosis ? (
+          <SectionBlock title={sectionTitle("diagnosis", "Diagnosis")}>
+            <InfoCard><Text style={s.bodyText}>{rx.diagnosis}</Text></InfoCard>
+          </SectionBlock>
+        ) : null}
+
         {/* Drugs */}
         {sectionEnabled("drugs") && rx.drugs && rx.drugs.length > 0 && (
-          <SectionBlock title={sectionTitle("drugs", "Rx — Drugs & Medications")}>
+          <SectionBlock title={sectionTitle("drugs", "Treatment (Rx)")}>
             <View style={{ gap: 10 }}>
               {rx.drugs.map((drug: Drug, i: number) => (
                 <InfoCard key={drug.id ?? i}>
@@ -471,9 +484,16 @@ export default function PrescriptionDetailScreen() {
           </SectionBlock>
         )}
 
+        {/* Investigations */}
+        {sectionEnabled("investigations") && rx.investigations ? (
+          <SectionBlock title={sectionTitle("investigations", "Investigations")}>
+            <InfoCard><Text style={s.bodyText}>{rx.investigations}</Text></InfoCard>
+          </SectionBlock>
+        ) : null}
+
         {/* Advice */}
         {sectionEnabled("advice") && rx.advice ? (
-          <SectionBlock title={sectionTitle("advice", "Advice (উপদেশ)")}>
+          <SectionBlock title={sectionTitle("advice", "Advice/উপদেশ")}>
             <InfoCard>
               <Text style={s.bodyText}>{rx.advice}</Text>
               {rx.adviceBn ? (
@@ -488,7 +508,7 @@ export default function PrescriptionDetailScreen() {
 
         {/* Follow-up */}
         {sectionEnabled("followUp") && rx.followUp ? (
-          <SectionBlock title={sectionTitle("followUp", "Follow-up (পরবর্তী ভিজিট)")}>
+          <SectionBlock title={sectionTitle("followUp", "Follow-Up Time")}>
             <InfoCard>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Feather name="calendar" size={16} color={colors.primary} />

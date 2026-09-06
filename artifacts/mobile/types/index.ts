@@ -86,6 +86,9 @@ export interface Prescription {
   patientId: string;
   patientName: string;
   patientAge: string;
+  patientWeight?: string;
+  patientPhone?: string;
+  patientPuid?: string;
   date: string;
 
   rightEyeVA: EyeVA;
@@ -95,6 +98,9 @@ export interface Prescription {
   chiefComplaintSelections?: ChiefComplaintSelection[];
   customComplaint?: string;
   pastHistory: PastHistory;
+  pastHistoryNotes?: string;
+  diagnosis?: string;
+  investigations?: string;
   customSections?: CustomPrescriptionSection[];
   sectionFields?: Record<string, { selectedOptions: string[]; freeText: string }>;
   sectionTitles?: Record<string, string>;

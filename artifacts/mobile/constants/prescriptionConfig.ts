@@ -1,7 +1,7 @@
 import { PrescriptionConfig, PrescriptionSectionConfig, PrescriptionSubsectionConfig } from "@/types";
 
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
-  version: 4,
+  version: 5,
   chiefComplaints: [
     "DOV",
     "Double Vision",
@@ -35,13 +35,13 @@ export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
   lensMaterial: ["Glass", "Plastic"],
   followUp: ["1 week", "2 weeks", "1 month", "3 months", "6 months", "1 year", "As needed"],
   sections: [
-    { id: "patient", title: "Patient", enabled: true, builtIn: true },
+    { id: "patient", title: "Patient Particulars", enabled: true, builtIn: true },
     { id: "chiefComplaints", title: "Chief Complaints", enabled: true, builtIn: true },
-    { id: "pastHistory", title: "Past History", enabled: true, builtIn: true },
+    { id: "pastHistory", title: "History", enabled: true, builtIn: true },
     { id: "visualAcuity", title: "Visual Acuity", enabled: true, builtIn: true },
     {
       id: "examination",
-      title: "Examination Findings",
+      title: "Other Examination Findings",
       enabled: true,
       builtIn: true,
       subsections: [
@@ -50,13 +50,15 @@ export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
         { id: "posteriorSegment", title: "Posterior Segment", enabled: true, builtIn: true, options: [] },
       ],
     },
-    { id: "gat", title: "GAT / Intraocular Pressure", enabled: true, builtIn: true },
-    { id: "drugs", title: "Rx — Drugs & Medications", enabled: true, builtIn: true },
+    { id: "gat", title: "IOP", enabled: true, builtIn: true },
+    { id: "diagnosis", title: "Diagnosis", enabled: true, builtIn: true, options: [] },
+    { id: "drugs", title: "Treatment (Rx)", enabled: true, builtIn: true },
     { id: "spectacle", title: "Spectacle Correction", enabled: true, builtIn: true },
     { id: "lens", title: "Lens Options", enabled: true, builtIn: true },
+    { id: "investigations", title: "Investigations", enabled: true, builtIn: true, options: [] },
     {
       id: "advice",
-      title: "Advice (উপদেশ)",
+      title: "Advice/উপদেশ",
       enabled: true,
       builtIn: true,
       options: [
@@ -74,7 +76,7 @@ export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
         "অন্ধকারে মোবাইল/টিভি/কম্পিউটার বা যেকোনো ডিজিটাল স্ক্রিন ব্যবহার পুরোপুরি বন্ধ করতে হবে।",
       ],
     },
-    { id: "followUp", title: "Follow-up (পরবর্তী ভিজিট)", enabled: true, builtIn: true },
+    { id: "followUp", title: "Follow-Up Time", enabled: true, builtIn: true },
   ],
 };
 
@@ -129,25 +131,47 @@ function normalizeSubsections(
 export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
   const input = (raw && typeof raw === "object" ? raw : {}) as Partial<PrescriptionConfig>;
   const rawSections = Array.isArray(input.sections) ? input.sections : [];
+  const legacyTitles: Record<string, string[]> = {
+    patient: ["Patient"],
+    pastHistory: ["Past History"],
+    examination: ["Examination Findings"],
+    gat: ["GAT / Intraocular Pressure"],
+    drugs: ["Rx — Drugs & Medications"],
+    advice: ["Advice (উপদেশ)"],
+    followUp: ["Follow-up (পরবর্তী ভিজিট)"],
+  };
   const sections = DEFAULT_PRESCRIPTION_CONFIG.sections.map((fallback) => {
-    const saved = rawSections.find((section) => section?.id === fallback.id);
+    const saved = rawSections.find((section) => section?.id === fallback.id)
+      || (fallback.id === "investigations"
+        ? rawSections.find((section) => section?.title?.trim().toLowerCase() === "investigations")
+        : undefined);
     const savedOptions = saved?.options;
-    const options = fallback.id === "advice" && input.version !== DEFAULT_PRESCRIPTION_CONFIG.version
+    const options = fallback.id === "advice" && (!input.version || input.version < 4)
       ? cleanOptions([...(fallback.options || []), ...(Array.isArray(savedOptions) ? savedOptions : [])], fallback.options || [])
       : cleanOptions(savedOptions, fallback.options || []);
+    const savedTitle = typeof saved?.title === "string" && saved.title.trim() ? saved.title.trim() : "";
+    const title = input.version && input.version < 5 && legacyTitles[fallback.id]?.includes(savedTitle)
+      ? fallback.title
+      : savedTitle || fallback.title;
     return {
       ...fallback,
       ...(saved && typeof saved === "object" ? saved : {}),
       id: fallback.id,
       builtIn: true,
-      title: typeof saved?.title === "string" && saved.title.trim() ? saved.title.trim() : fallback.title,
+      title,
       enabled: saved?.enabled !== false,
       options,
       subsections: normalizeSubsections(fallback.subsections, saved?.subsections),
     };
   });
   rawSections
-    .filter((section) => section && typeof section === "object" && section.id && !sections.some((item) => item.id === section.id))
+    .filter((section) =>
+      section
+      && typeof section === "object"
+      && section.id
+      && !sections.some((item) => item.id === section.id)
+      && section.title?.trim().toLowerCase() !== "investigations"
+    )
     .forEach((section) => {
       if (typeof section.title === "string" && section.title.trim()) {
         sections.push({
@@ -162,7 +186,7 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
     });
 
   const savedChiefComplaints = cleanOptions(input.chiefComplaints, []);
-  const chiefComplaints = input.version === DEFAULT_PRESCRIPTION_CONFIG.version
+  const chiefComplaints = input.version && input.version >= 3
     ? cleanOptions(savedChiefComplaints, DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints)
     : cleanOptions([...DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints, ...savedChiefComplaints], DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints);
 

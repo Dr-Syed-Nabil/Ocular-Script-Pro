@@ -173,7 +173,7 @@ function SectionEditor({
             ) : null}
           </View>
 
-          {section.id === "advice" || !section.builtIn ? (
+          {["advice", "diagnosis", "investigations"].includes(section.id) || !section.builtIn ? (
             <OptionEditor
               title={`${section.title} options`}
               description="Selectable choices shown above the free-text box."

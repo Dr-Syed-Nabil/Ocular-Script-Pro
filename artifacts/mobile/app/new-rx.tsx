@@ -507,8 +507,11 @@ export default function NewRxScreen() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
-  const [newPatientPhone, setNewPatientPhone] = useState("");
   const [patientAge, setPatientAge] = useState("");
+  const [patientWeight, setPatientWeight] = useState("");
+  const [patientPhone, setPatientPhone] = useState("");
+  const [patientPuid, setPatientPuid] = useState("");
+  const [prescriptionDate, setPrescriptionDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   const [reVA, setReVA] = useState<EyeVA>(EMPTY_VA);
   const [leVA, setLeVA] = useState<EyeVA>(EMPTY_VA);
@@ -519,6 +522,7 @@ export default function NewRxScreen() {
   const [customComplaint, setCustomComplaint] = useState("");
   const [showComplaintPicker, setShowComplaintPicker] = useState(false);
   const [history, setHistory] = useState<PastHistory>(EMPTY_HISTORY);
+  const [pastHistoryNotes, setPastHistoryNotes] = useState("");
 
   const [adnexa, setAdnexa] = useState("");
   const [anteriorSegment, setAnteriorSegment] = useState("");
@@ -526,6 +530,7 @@ export default function NewRxScreen() {
 
   const [gatRight, setGatRight] = useState("");
   const [gatLeft, setGatLeft] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
 
   const [drugs, setDrugs] = useState<Drug[]>([emptyDrug()]);
 
@@ -557,6 +562,7 @@ export default function NewRxScreen() {
   const [lensType, setLensType] = useState("");
   const [lensCoating, setLensCoating] = useState<string[]>([]);
   const [lensMaterial, setLensMaterial] = useState("");
+  const [investigations, setInvestigations] = useState("");
 
   const [advice, setAdvice] = useState("");
   const [adviceBn, setAdviceBn] = useState("");
@@ -598,8 +604,15 @@ export default function NewRxScreen() {
     const source = prescriptions.find((r) => r.id === sourceId);
     if (!source) return;
     const patient = patients.find((p) => p.id === source.patientId);
-    if (patient) { setSelectedPatient(patient); setPatientQuery(patient.name); }
+    if (patient) {
+      setSelectedPatient(patient);
+      setPatientQuery(patient.name);
+      setPatientPhone(source.patientPhone ?? patient.phone);
+      setPatientPuid(source.patientPuid ?? patient.puid ?? "");
+    }
     setPatientAge(source.patientAge);
+    setPatientWeight(source.patientWeight || "");
+    setPrescriptionDate(editId ? source.date : new Date().toISOString().split("T")[0]);
     const sourceVaMode = (source.rightEyeVA.wa || source.leftEyeVA.wa) && !(source.rightEyeVA.ua || source.leftEyeVA.ua) ? "wa" : "ua";
     setVaMode(sourceVaMode);
     setReVA({ ...source.rightEyeVA, [sourceVaMode === "ua" ? "wa" : "ua"]: "" });
@@ -608,17 +621,23 @@ export default function NewRxScreen() {
     setChiefComplaintSelections(source.chiefComplaintSelections || []);
     setCustomComplaint(source.customComplaint || (!source.chiefComplaintSelections?.length ? source.chiefComplaints : ""));
     setHistory(source.pastHistory);
+    setPastHistoryNotes(source.pastHistoryNotes || "");
     setSectionFields(source.sectionFields || {});
     setAdnexa(source.sectionFields?.["examination:adnexa"]?.freeText ?? source.adnexa);
     setAnteriorSegment(source.sectionFields?.["examination:anteriorSegment"]?.freeText ?? source.anteriorSegment);
     setPosteriorSegment(source.sectionFields?.["examination:posteriorSegment"]?.freeText ?? source.posteriorSegment);
     setGatRight(source.gatRight); setGatLeft(source.gatLeft);
+    setDiagnosis(source.sectionFields?.diagnosis?.freeText ?? source.diagnosis ?? "");
     setDrugs(source.drugs.length ? source.drugs.map((d) => ({ ...d, id: newId() })) : [emptyDrug()]);
     setReD(source.rightEyeDistance); setLeD(source.leftEyeDistance);
     setReN(source.rightEyeNear); setLeN(source.leftEyeNear);
     setIpd(source.ipd); setAddValue(source.addValue || "");
     setLensUsage(source.lensUsage); setLensType(source.lensType);
     setLensCoating(source.lensCoating || []); setLensMaterial(source.lensMaterial);
+    const legacyInvestigations = source.customSections?.find((section) =>
+      section.id === "investigations" || section.title.trim().toLowerCase() === "investigations"
+    );
+    setInvestigations(source.sectionFields?.investigations?.freeText ?? source.investigations ?? legacyInvestigations?.freeText ?? legacyInvestigations?.content ?? "");
     setAdvice(source.sectionFields?.advice?.freeText ?? source.advice); setAdviceBn(source.adviceBn);
     setFollowUp(source.followUp); setFollowUpBn(source.followUpBn);
     setCustomSections(source.customSections || []);
@@ -665,6 +684,9 @@ export default function NewRxScreen() {
     if (found) {
       setSelectedPatient(found);
       setPatientQuery(found.name);
+      setPatientPhone(found.phone);
+      setPatientPuid(found.puid || "");
+      setPatientAge(found.ageAtEnrollment || "");
       setShowDropdown(false);
       setShowScanner(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -717,7 +739,7 @@ export default function NewRxScreen() {
     try {
       let patient = selectedPatient;
       if (isNewPatient) {
-        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: newPatientPhone.trim(), email: "", gender: "", ageAtEnrollment: patientAge.trim() });
+        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: patientPhone.trim(), email: "", gender: "", ageAtEnrollment: patientAge.trim() });
       }
       if (!patient) return;
 
@@ -726,6 +748,8 @@ export default function NewRxScreen() {
       const adnexaField = getSectionField("examination:adnexa", adnexa);
       const anteriorField = getSectionField("examination:anteriorSegment", anteriorSegment);
       const posteriorField = getSectionField("examination:posteriorSegment", posteriorSegment);
+      const diagnosisField = getSectionField("diagnosis", diagnosis);
+      const investigationsField = getSectionField("investigations", investigations);
       const adviceField = getSectionField("advice", advice);
       if (adnexaField.freeText.trim()) adnexaSugg.add(adnexaField.freeText);
       if (anteriorField.freeText.trim()) anteriorSugg.add(anteriorField.freeText);
@@ -761,6 +785,12 @@ export default function NewRxScreen() {
         if (section.id === "advice") {
           return { ...section, options: appendOption(section.options, adviceField.freeText) };
         }
+        if (section.id === "diagnosis") {
+          return { ...section, options: appendOption(section.options, diagnosisField.freeText) };
+        }
+        if (section.id === "investigations") {
+          return { ...section, options: appendOption(section.options, investigationsField.freeText) };
+        }
         if (!section.builtIn) {
           return {
             ...section,
@@ -785,9 +815,11 @@ export default function NewRxScreen() {
       const finalAdnexa = configurableFieldText(adnexaField);
       const finalAnteriorSegment = configurableFieldText(anteriorField);
       const finalPosteriorSegment = configurableFieldText(posteriorField);
+      const finalDiagnosis = configurableFieldText(diagnosisField);
+      const finalInvestigations = configurableFieldText(investigationsField);
       const finalAdvice = configurableFieldText(adviceField);
       const savedCustomSections = prescriptionConfig.sections
-        .filter((section) => !section.builtIn && section.enabled)
+        .filter((section) => !section.builtIn && section.enabled && section.title.trim().toLowerCase() !== "investigations")
         .map((section) => {
           const mainValue = getCustomSectionField(section.id);
           const subsectionValues = (section.subsections || [])
@@ -820,15 +852,21 @@ export default function NewRxScreen() {
         .filter((section) => section.content);
       const prescriptionData = {
         patientId: patient.id, patientName: patient.name, patientAge,
-        date: new Date().toISOString().split("T")[0],
+        patientWeight: patientWeight.trim(),
+        patientPhone: patientPhone.trim() || patient.phone,
+        patientPuid: patient.puid || patientPuid,
+        date: prescriptionDate,
         rightEyeVA: reVA, leftEyeVA: leVA,
-         chiefComplaints, chiefComplaintSelections, customComplaint: customComplaint.trim(), pastHistory: history,
+        chiefComplaints, chiefComplaintSelections, customComplaint: customComplaint.trim(),
+        pastHistory: history, pastHistoryNotes: pastHistoryNotes.trim(),
         adnexa: finalAdnexa, anteriorSegment: finalAnteriorSegment, posteriorSegment: finalPosteriorSegment,
         gatRight, gatLeft,
+        diagnosis: finalDiagnosis,
         drugs: drugs.filter((d) => d.name.trim()),
         rightEyeDistance: reD, leftEyeDistance: leD,
         rightEyeNear: reN, leftEyeNear: leN, ipd, nearIPD, addValue,
         lensUsage, lensType, lensCoating, lensMaterial,
+        investigations: finalInvestigations,
         advice: finalAdvice, adviceBn, followUp, followUpBn,
         customSections: [...savedCustomSections, ...extraExaminationSections],
         sectionFields: {
@@ -836,6 +874,8 @@ export default function NewRxScreen() {
           "examination:adnexa": adnexaField,
           "examination:anteriorSegment": anteriorField,
           "examination:posteriorSegment": posteriorField,
+          diagnosis: diagnosisField,
+          investigations: investigationsField,
           advice: adviceField,
         },
         sectionTitles: Object.fromEntries(prescriptionConfig.sections.map((section) => [section.id, section.title])),
@@ -997,14 +1037,21 @@ export default function NewRxScreen() {
         bottomOffset={20}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ─── Patient ─── */}
-        <SectionTitle title="Patient" />
+        {/* ─── 1. Patient Particulars ─── */}
+        <SectionTitle title={sectionTitle("patient", "Patient Particulars")} />
+        <MiniLabel label="Name of the patient" />
         {!isNewPatient ? (
           <View>
             <View style={s.searchRow}>
               <Feather name="user" size={15} color={colors.mutedForeground} style={{ marginRight: 8 }} />
               <TextInput style={s.patientInput} value={patientQuery}
-                onChangeText={(t) => { setPatientQuery(t); setSelectedPatient(null); setShowDropdown(true); }}
+                onChangeText={(t) => {
+                  setPatientQuery(t);
+                  setSelectedPatient(null);
+                  setPatientPhone("");
+                  setPatientPuid("");
+                  setShowDropdown(true);
+                }}
                 onFocus={() => setShowDropdown(true)}
                 placeholder="Search patient by name…" placeholderTextColor={colors.mutedForeground}
               />
@@ -1024,7 +1071,14 @@ export default function NewRxScreen() {
               <View style={s.dropdown}>
                 {filteredPatients.map((p) => (
                   <TouchableOpacity key={p.id} style={s.dropdownItem}
-                    onPress={() => { setSelectedPatient(p); setPatientQuery(p.name); setShowDropdown(false); }}>
+                    onPress={() => {
+                      setSelectedPatient(p);
+                      setPatientQuery(p.name);
+                      setPatientAge(p.ageAtEnrollment || "");
+                      setPatientPhone(p.phone);
+                      setPatientPuid(p.puid || "");
+                      setShowDropdown(false);
+                    }}>
                     <Text style={s.dropdownName}>{p.name}</Text>
                     {p.phone ? <Text style={s.dropdownSub}>{p.phone}</Text> : null}
                   </TouchableOpacity>
@@ -1032,14 +1086,21 @@ export default function NewRxScreen() {
                 {filteredPatients.length === 0 && <View style={s.dropdownItem}><Text style={s.dropdownSub}>No patients found</Text></View>}
               </View>
             )}
-            <TouchableOpacity style={s.linkBtn} onPress={() => { setIsNewPatient(true); setShowDropdown(false); }}>
+            <TouchableOpacity style={s.linkBtn} onPress={() => {
+              setIsNewPatient(true);
+              setSelectedPatient(null);
+              setPatientQuery("");
+              setPatientAge("");
+              setPatientPhone("");
+              setPatientPuid("");
+              setShowDropdown(false);
+            }}>
               <Feather name="user-plus" size={13} color={colors.primary} /><Text style={s.linkBtnText}>Create new patient</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
             <TextInput style={s.input} value={newPatientName} onChangeText={setNewPatientName} placeholder="Patient full name *" placeholderTextColor={colors.mutedForeground} />
-            <TextInput style={s.input} value={newPatientPhone} onChangeText={setNewPatientPhone} placeholder="Phone number" keyboardType="phone-pad" placeholderTextColor={colors.mutedForeground} />
             <TouchableOpacity style={s.linkBtn} onPress={() => setIsNewPatient(false)}>
               <Feather name="search" size={13} color={colors.primary} /><Text style={s.linkBtnText}>Search existing patient</Text>
             </TouchableOpacity>
@@ -1047,23 +1108,45 @@ export default function NewRxScreen() {
         )}
         <View style={s.row}>
           <View style={{ flex: 1 }}>
-            <MiniLabel label="Age" />
+            <MiniLabel label="Age of the patient" />
             <TextInput style={s.input} value={patientAge} onChangeText={setPatientAge} placeholder="e.g. 45 yrs" placeholderTextColor={colors.mutedForeground} />
+          </View>
+          <View style={{ width: 12 }} />
+          <View style={{ flex: 1 }}>
+            <MiniLabel label="Weight of the patient" />
+            <TextInput style={s.input} value={patientWeight} onChangeText={setPatientWeight} placeholder="e.g. 62 kg" keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+          </View>
+        </View>
+        <View style={[s.row, { marginTop: 10 }]}>
+          <View style={{ flex: 1 }}>
+            <MiniLabel label="Contact number" />
+            <TextInput style={s.input} value={patientPhone} onChangeText={setPatientPhone} placeholder="Phone number" keyboardType="phone-pad" placeholderTextColor={colors.mutedForeground} />
           </View>
           <View style={{ width: 12 }} />
           <View style={{ flex: 1 }}>
             <MiniLabel label="Date" />
             <View style={[s.input, { justifyContent: "center" }]}>
               <Text style={{ fontSize: 14, color: colors.foreground, fontFamily: "Inter_500Medium" }}>
-                {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                {new Date(`${prescriptionDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
               </Text>
             </View>
           </View>
         </View>
+        <View style={{ marginTop: 10 }}>
+          <MiniLabel label="PUID" />
+          <View style={[s.input, { justifyContent: "center" }]}>
+            <Text style={{ fontSize: 14, color: patientPuid ? colors.foreground : colors.mutedForeground, fontFamily: "Inter_500Medium" }}>
+              {patientPuid || (isNewPatient ? "Generated when prescription is saved" : "Select a patient to view PUID")}
+            </Text>
+          </View>
+        </View>
 
-        {/* ─── Chief Complaints ─── */}
+        {/* ─── 2. History ─── */}
+        {(sectionEnabled("chiefComplaints") || sectionEnabled("pastHistory")) ? (
+          <SectionTitle title={sectionTitle("pastHistory", "History")} />
+        ) : null}
         {sectionEnabled("chiefComplaints") ? <>
-        <SectionTitle title={sectionTitle("chiefComplaints", "Chief Complaints")} />
+        <MiniLabel label={sectionTitle("chiefComplaints", "Chief Complaints")} />
         <TouchableOpacity
           style={s.complaintField}
           onPress={() => setShowComplaintPicker(true)}
@@ -1076,19 +1159,30 @@ export default function NewRxScreen() {
         </TouchableOpacity>
         </> : null}
 
-        {/* ─── Past History ─── */}
         {sectionEnabled("pastHistory") ? <>
-        <SectionTitle title={sectionTitle("pastHistory", "Past History")} />
+        <View style={{ height: 12 }} />
+        <MiniLabel label="Comorbidities" />
         <View style={s.checkGrid}>
           {([["dm","DM"],["htn","HTN"],["ihd","IHD"],["ckd","CKD"],["ba","BA"],["thyDs","Thyroid Ds"],["uromax","Uromax"]] as [keyof PastHistory, string][]).map(([key, label]) => (
             <CheckItem key={key} label={label} value={history[key] as boolean} onChange={(v) => setHistory((h) => ({ ...h, [key]: v }))} />
           ))}
         </View>
         <View style={{ marginTop: 8 }}>
-          <MiniLabel label="Others" />
+          <MiniLabel label="Other comorbidity" />
           <SmartInput fieldKey="past_history_others" value={history.others}
             onChangeText={(v) => setHistory((h) => ({ ...h, others: v }))}
-            placeholder="Other medical history…" />
+            placeholder="Other comorbidity…" />
+        </View>
+        <View style={{ marginTop: 10 }}>
+          <MiniLabel label="Past History" />
+          <SmartInput
+            fieldKey="past_history_notes"
+            value={pastHistoryNotes}
+            onChangeText={setPastHistoryNotes}
+            placeholder="Previous illnesses, surgeries, treatment, or relevant history…"
+            minHeight={72}
+            multiline
+          />
         </View>
         </> : null}
 
@@ -1114,10 +1208,10 @@ export default function NewRxScreen() {
         />
         </> : null}
 
-        {/* ─── Examination ─── */}
-        {sectionEnabled("examination") ? <>
-        <SectionTitle title={sectionTitle("examination", "Examination Findings")} />
-        {(prescriptionConfig.sections.find((section) => section.id === "examination")?.subsections || [])
+        {/* ─── 4. Other Examination Findings ─── */}
+        {(sectionEnabled("examination") || sectionEnabled("gat")) ? <>
+        <SectionTitle title={sectionTitle("examination", "Other Examination Findings")} />
+        {sectionEnabled("examination") ? (prescriptionConfig.sections.find((section) => section.id === "examination")?.subsections || [])
           .filter((subsection) => subsection.enabled)
           .map((subsection, index) => {
             const fallback = subsection.id === "adnexa" ? adnexa
@@ -1143,12 +1237,9 @@ export default function NewRxScreen() {
                 />
               </View>
             );
-          })}
-        </> : null}
-
-        {/* ─── GAT ─── */}
-        {sectionEnabled("gat") ? <>
-        <SectionTitle title={sectionTitle("gat", "GAT / Intraocular Pressure")} />
+          }) : null}
+        {sectionEnabled("gat") ? <View style={{ marginTop: 12 }}>
+        <MiniLabel label={sectionTitle("gat", "IOP")} />
         <View style={s.row}>
           <View style={{ flex: 1 }}>
             <MiniLabel label="RE (mmHg)" />
@@ -1160,11 +1251,28 @@ export default function NewRxScreen() {
             <TextInput style={[s.input, { textAlign: "center" }]} value={gatLeft} onChangeText={setGatLeft} placeholder="14" keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
           </View>
         </View>
+        </View> : null}
         </> : null}
 
-        {/* ─── Rx / Drugs ─── */}
+        {/* ─── 5. Diagnosis ─── */}
+        {sectionEnabled("diagnosis") ? <>
+        <SectionTitle title={sectionTitle("diagnosis", "Diagnosis")} />
+        <ConfigurableTextField
+          fieldKey="diagnosis"
+          options={prescriptionConfig.sections.find((section) => section.id === "diagnosis")?.options || []}
+          value={getSectionField("diagnosis", diagnosis)}
+          onChange={(value) => {
+            updateSectionField("diagnosis", value);
+            setDiagnosis(value.freeText);
+          }}
+          placeholder="Enter diagnosis…"
+          minHeight={80}
+        />
+        </> : null}
+
+        {/* ─── 6. Treatment (Rx) ─── */}
         {sectionEnabled("drugs") ? <>
-        <SectionTitle title={sectionTitle("drugs", "Rx — Drugs & Medications")} />
+        <SectionTitle title={sectionTitle("drugs", "Treatment (Rx)")} />
         {drugs.map((drug) => (
           <DrugRow key={drug.id} drug={drug} onChange={(u) => updateDrug(drug.id, u)} onDelete={() => removeDrug(drug.id)} drugSuggestions={drugNameSugg} routes={prescriptionConfig.drugRoutes} />
         ))}
@@ -1174,9 +1282,10 @@ export default function NewRxScreen() {
         </TouchableOpacity>
         </> : null}
 
-        {/* ─── Spectacle Correction ─── */}
-        {sectionEnabled("spectacle") ? <>
+        {/* ─── 7. Spectacle Correction ─── */}
+        {(sectionEnabled("spectacle") || sectionEnabled("lens")) ? <>
         <SectionTitle title={sectionTitle("spectacle", "Spectacle Correction")} />
+        {sectionEnabled("spectacle") ? (
         <SpectacleTable
           reD={reD} leD={leD} reN={reN} leN={leN}
           ipd={ipd} nearIPD={nearIPD} addValue={addValue}
@@ -1187,11 +1296,9 @@ export default function NewRxScreen() {
           distanceVA={prescriptionConfig.distanceVA}
           nearVA={prescriptionConfig.nearVA}
         />
-        </> : null}
-
-        {/* ─── Lens Options ─── */}
-        {sectionEnabled("lens") ? <>
-        <SectionTitle title={sectionTitle("lens", "Lens Options")} />
+        ) : null}
+        {sectionEnabled("lens") ? <View style={{ marginTop: 14 }}>
+        <MiniLabel label={sectionTitle("lens", "Lens Options")} />
         <MiniLabel label="Usage" />
         <ToggleGroup value={lensUsage} onChange={(v) => setLensUsage(v as string)} options={prescriptionConfig.lensUsage} />
         <View style={{ height: 12 }} />
@@ -1203,38 +1310,28 @@ export default function NewRxScreen() {
         <View style={{ height: 12 }} />
         <MiniLabel label="Material" />
         <ToggleGroup value={lensMaterial} onChange={(v) => setLensMaterial(v as string)} options={prescriptionConfig.lensMaterial} />
+        </View> : null}
         </> : null}
 
-        {prescriptionConfig.sections.filter((section) => !section.builtIn && section.enabled).map((section) => (
-          <View key={section.id}>
-            <SectionTitle title={section.title} />
-            <ConfigurableTextField
-              fieldKey={`custom_${section.id}`}
-              options={section.options || []}
-              value={getCustomSectionField(section.id)}
-              onChange={(value) => updateCustomSection(section.id, value)}
-              placeholder={`Enter ${section.title.toLowerCase()}…`}
-              minHeight={90}
-            />
-            {(section.subsections || []).filter((subsection) => subsection.enabled).map((subsection) => (
-              <View key={subsection.id} style={{ marginTop: 10 }}>
-                <MiniLabel label={subsection.title} />
-                <ConfigurableTextField
-                  fieldKey={`custom_${section.id}_${subsection.id}`}
-                  options={subsection.options}
-                  value={getSectionField(`custom:${section.id}:${subsection.id}`)}
-                  onChange={(value) => updateSectionField(`custom:${section.id}:${subsection.id}`, value)}
-                  placeholder={`Enter ${subsection.title.toLowerCase()}…`}
-                  minHeight={72}
-                />
-              </View>
-            ))}
-          </View>
-        ))}
+        {/* ─── 8. Investigations ─── */}
+        {sectionEnabled("investigations") ? <>
+        <SectionTitle title={sectionTitle("investigations", "Investigations")} />
+        <ConfigurableTextField
+          fieldKey="investigations"
+          options={prescriptionConfig.sections.find((section) => section.id === "investigations")?.options || []}
+          value={getSectionField("investigations", investigations)}
+          onChange={(value) => {
+            updateSectionField("investigations", value);
+            setInvestigations(value.freeText);
+          }}
+          placeholder="Enter requested investigations…"
+          minHeight={80}
+        />
+        </> : null}
 
-        {/* ─── Advice ─── */}
+        {/* ─── 9. Advice ─── */}
         {sectionEnabled("advice") ? <>
-        <SectionTitle title={sectionTitle("advice", "Advice (উপদেশ)")} />
+        <SectionTitle title={sectionTitle("advice", "Advice/উপদেশ")} />
         <ConfigurableTextField
           fieldKey="advice"
           options={prescriptionConfig.sections.find((section) => section.id === "advice")?.options || []}
@@ -1263,9 +1360,9 @@ export default function NewRxScreen() {
         ) : null}
         </> : null}
 
-        {/* ─── Follow-up ─── */}
+        {/* ─── 10. Follow-up ─── */}
         {sectionEnabled("followUp") ? <>
-        <SectionTitle title={sectionTitle("followUp", "Follow-up (পরবর্তী ভিজিট)")} />
+        <SectionTitle title={sectionTitle("followUp", "Follow-Up Time")} />
         <ToggleGroup value={followUp}
           onChange={(v) => { setFollowUp(v as string); setFollowUpBn(translateToBangla(v as string)); }}
           options={prescriptionConfig.followUp}
@@ -1282,6 +1379,34 @@ export default function NewRxScreen() {
           </View>
         ) : null}
         </> : null}
+
+        {/* Additional custom sections */}
+        {prescriptionConfig.sections.filter((section) => !section.builtIn && section.enabled).map((section) => (
+          <View key={section.id}>
+            <SectionTitle title={section.title} />
+            <ConfigurableTextField
+              fieldKey={`custom_${section.id}`}
+              options={section.options || []}
+              value={getCustomSectionField(section.id)}
+              onChange={(value) => updateCustomSection(section.id, value)}
+              placeholder={`Enter ${section.title.toLowerCase()}…`}
+              minHeight={90}
+            />
+            {(section.subsections || []).filter((subsection) => subsection.enabled).map((subsection) => (
+              <View key={subsection.id} style={{ marginTop: 10 }}>
+                <MiniLabel label={subsection.title} />
+                <ConfigurableTextField
+                  fieldKey={`custom_${section.id}_${subsection.id}`}
+                  options={subsection.options}
+                  value={getSectionField(`custom:${section.id}:${subsection.id}`)}
+                  onChange={(value) => updateSectionField(`custom:${section.id}:${subsection.id}`, value)}
+                  placeholder={`Enter ${subsection.title.toLowerCase()}…`}
+                  minHeight={72}
+                />
+              </View>
+            ))}
+          </View>
+        ))}
       </KeyboardAwareScrollView>
     </View>
   );
