@@ -21,8 +21,11 @@ import { RxPadImageFit, RxPadOverlayConfig, RxPadOverlayField } from "@/types";
 import {
   constrainRxPadOverlayField,
   constrainRxPadOverlayFields,
+  getRxPadImageRenderGeometry,
   getRxPadImageResizeMode,
   getRxPadOverlayContentOptions,
+  normalizeRxPadImageFit,
+  normalizeRxPadImagePosition,
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
 
@@ -182,6 +185,57 @@ function FieldNumberInput({
   );
 }
 
+function ImageAlignmentControl({
+  label,
+  value,
+  onChange,
+  testID,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  testID: string;
+}) {
+  const colors = useColors();
+  const normalizedValue = normalizeRxPadImagePosition(value);
+  const adjust = (amount: number) => onChange(normalizeRxPadImagePosition(normalizedValue + amount));
+
+  return (
+    <View style={styles.alignmentRow}>
+      <Text style={[styles.alignmentLabel, { color: colors.mutedForeground }]}>{label}</Text>
+      <View style={styles.alignmentActions}>
+        <TouchableOpacity
+          accessibilityLabel={`Move scan ${label.toLowerCase()} backward`}
+          testID={`${testID}-decrease`}
+          style={[styles.alignmentButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          onPress={() => adjust(-5)}
+          disabled={normalizedValue <= 0}
+        >
+          <Feather name="minus" size={14} color={normalizedValue <= 0 ? colors.mutedForeground : colors.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.alignmentValue, { color: colors.foreground }]}>{Math.round(normalizedValue)}%</Text>
+        <TouchableOpacity
+          accessibilityLabel={`Move scan ${label.toLowerCase()} forward`}
+          testID={`${testID}-increase`}
+          style={[styles.alignmentButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          onPress={() => adjust(5)}
+          disabled={normalizedValue >= 100}
+        >
+          <Feather name="plus" size={14} color={normalizedValue >= 100 ? colors.mutedForeground : colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel={`Center scan ${label.toLowerCase()}`}
+          testID={`${testID}-center`}
+          style={[styles.centerButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          onPress={() => onChange(50)}
+        >
+          <Text style={[styles.centerButtonText, { color: colors.primary }]}>Center</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function RxPadSettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -209,6 +263,18 @@ export default function RxPadSettingsScreen() {
   const selectedContentIsPartial = selectedField?.printMode === "selected";
   const previewScale = PREVIEW_WIDTH / draft.paperWidthMm;
   const previewHeight = draft.paperHeightMm * previewScale;
+  const imageFit = normalizeRxPadImageFit(draft.imageFit);
+  const previewImageGeometry = draft.imageWidthPx && draft.imageHeightPx
+    ? getRxPadImageRenderGeometry(
+      PREVIEW_WIDTH,
+      previewHeight,
+      draft.imageWidthPx,
+      draft.imageHeightPx,
+      imageFit,
+      draft.imagePositionX,
+      draft.imagePositionY,
+    )
+    : undefined;
 
   const updateField = (id: string, patch: Partial<RxPadOverlayField>) => {
     setDraft((current) => ({
@@ -423,7 +489,7 @@ export default function RxPadSettingsScreen() {
           </Text>
           <View style={styles.fitOptions}>
             {IMAGE_FIT_OPTIONS.map((option) => {
-              const selected = (draft.imageFit || "fit") === option.value;
+              const selected = imageFit === option.value;
               return (
                 <TouchableOpacity
                   key={option.value}
@@ -444,6 +510,26 @@ export default function RxPadSettingsScreen() {
               );
             })}
           </View>
+          {draft.imageUri && imageFit !== "fit" ? (
+            <View style={[styles.alignmentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.alignmentTitle, { color: colors.foreground }]}>Scan alignment</Text>
+              <Text style={[styles.alignmentDescription, { color: colors.mutedForeground }]}>
+                Shift the scan without moving prescription fields. These settings are saved with this Rx Pad.
+              </Text>
+              <ImageAlignmentControl
+                label="Horizontal"
+                value={draft.imagePositionX ?? 50}
+                testID="rx-pad-alignment-horizontal"
+                onChange={(imagePositionX) => setDraft((current) => ({ ...current, imagePositionX }))}
+              />
+              <ImageAlignmentControl
+                label="Vertical"
+                value={draft.imagePositionY ?? 50}
+                testID="rx-pad-alignment-vertical"
+                onChange={(imagePositionY) => setDraft((current) => ({ ...current, imagePositionY }))}
+              />
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -468,7 +554,21 @@ export default function RxPadSettingsScreen() {
             The preview is scaled to fit this screen. Press and hold a category to move it, or drag the blue corner handle to resize it. The PDF print remains at the physical size entered above.
           </Text>
           <View style={[styles.previewFrame, { width: PREVIEW_WIDTH, height: previewHeight, borderColor: colors.border, backgroundColor: colors.surface }]}>
-            {draft.imageUri ? <Image source={{ uri: draft.imageUri }} style={StyleSheet.absoluteFillObject} resizeMode={getRxPadImageResizeMode(draft.imageFit || "fit")} /> : (
+            {draft.imageUri ? (
+              <Image
+                source={{ uri: draft.imageUri }}
+                style={previewImageGeometry
+                  ? {
+                    position: "absolute",
+                    left: previewImageGeometry.left,
+                    top: previewImageGeometry.top,
+                    width: previewImageGeometry.width,
+                    height: previewImageGeometry.height,
+                  }
+                  : StyleSheet.absoluteFillObject}
+                resizeMode={previewImageGeometry ? "stretch" : getRxPadImageResizeMode(imageFit)}
+              />
+            ) : (
               <View style={styles.noImage}>
                 <Text style={[styles.noImageText, { color: colors.mutedForeground }]}>Upload a pad scan to preview placement</Text>
               </View>
@@ -594,6 +694,16 @@ const styles = StyleSheet.create({
   fitOption: { flex: 1, borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 9 },
   fitOptionLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
   fitOptionDescription: { fontSize: 9, lineHeight: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  alignmentCard: { borderWidth: 1, borderRadius: 11, padding: 10, marginTop: 11 },
+  alignmentTitle: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  alignmentDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2, marginBottom: 4 },
+  alignmentRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 7 },
+  alignmentLabel: { flex: 1, fontSize: 11, fontFamily: "Inter_500Medium" },
+  alignmentActions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  alignmentButton: { width: 30, height: 30, borderWidth: 1, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  alignmentValue: { width: 42, textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  centerButton: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, height: 30, alignItems: "center", justifyContent: "center" },
+  centerButtonText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   inputRow: { flexDirection: "row", gap: 9, marginTop: 9 },
   inputLabel: { fontSize: 10, fontFamily: "Inter_500Medium", marginBottom: 4 },
   numberInput: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 8, fontSize: 13, fontFamily: "Inter_400Regular" },

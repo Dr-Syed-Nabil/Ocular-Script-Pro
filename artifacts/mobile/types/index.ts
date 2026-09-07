@@ -109,6 +109,8 @@ export interface RxPadOverlayConfig {
   imageWidthPx?: number;
   imageHeightPx?: number;
   imageFit?: RxPadImageFit;
+  imagePositionX?: number;
+  imagePositionY?: number;
   paperWidthMm: number;
   paperHeightMm: number;
   fields: RxPadOverlayField[];

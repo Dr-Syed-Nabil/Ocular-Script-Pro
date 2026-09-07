@@ -1,5 +1,10 @@
 import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig, RxPadOverlayField } from "@/types";
-import { constrainRxPadOverlayField, normalizeRxPadImageFit, normalizeRxPadPaperSize } from "@/utils/rxPadOverlay";
+import {
+  constrainRxPadOverlayField,
+  getRxPadImageBackgroundPosition,
+  normalizeRxPadImageFit,
+  normalizeRxPadPaperSize,
+} from "@/utils/rxPadOverlay";
 
 /* ── helpers ── */
 function esc(s: string | undefined): string {
@@ -574,6 +579,7 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
   const imageUri = overlay.imageUri || "";
   const imageFit = normalizeRxPadImageFit(overlay.imageFit);
   const imageBackgroundSize = imageFit === "contain" ? "contain" : imageFit === "crop" ? "cover" : "100% 100%";
+  const imageBackgroundPosition = getRxPadImageBackgroundPosition(overlay.imagePositionX, overlay.imagePositionY);
   const fields = overlay.fields
     .filter((field) => field.enabled)
     .map((field) => {
@@ -595,7 +601,7 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: ${width}mm; height: ${height}mm; margin: 0; padding: 0; overflow: hidden; }
   body { font-family: 'Roboto', 'Noto Sans Bengali', Arial, sans-serif; background: transparent; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background-color: #fff; background-image: url("${imageUri.replace(/"/g, "&quot;")}"); background-position: center center; background-size: ${imageBackgroundSize}; background-repeat: no-repeat; }
+   .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background-color: #fff; background-image: url("${imageUri.replace(/"/g, "&quot;")}"); background-position: ${imageBackgroundPosition}; background-size: ${imageBackgroundSize}; background-repeat: no-repeat; }
   .overlay-field { position: absolute; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.22; font-weight: 500; color: #111; }
 </style>
 </head>

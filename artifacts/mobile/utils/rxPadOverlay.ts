@@ -4,6 +4,7 @@ export const MIN_RX_PAD_PAPER_SIZE_MM = 20;
 export const MIN_RX_PAD_FIELD_WIDTH_MM = 5;
 export const MIN_RX_PAD_FIELD_HEIGHT_MM = 4;
 export const DEFAULT_RX_PAD_IMAGE_FIT: RxPadImageFit = "fit";
+export const DEFAULT_RX_PAD_IMAGE_POSITION = 50;
 
 export function normalizeRxPadImageFit(value: unknown): RxPadImageFit {
   return value === "contain" || value === "crop" ? value : DEFAULT_RX_PAD_IMAGE_FIT;
@@ -11,6 +12,70 @@ export function normalizeRxPadImageFit(value: unknown): RxPadImageFit {
 
 export function getRxPadImageResizeMode(fit: RxPadImageFit): "stretch" | "contain" | "cover" {
   return fit === "contain" ? "contain" : fit === "crop" ? "cover" : "stretch";
+}
+
+export function normalizeRxPadImagePosition(value: unknown): number {
+  const position = typeof value === "number" && Number.isFinite(value)
+    ? value
+    : DEFAULT_RX_PAD_IMAGE_POSITION;
+  return Math.max(0, Math.min(100, position));
+}
+
+export function getRxPadImageBackgroundPosition(positionX: unknown, positionY: unknown): string {
+  return `${normalizeRxPadImagePosition(positionX)}% ${normalizeRxPadImagePosition(positionY)}%`;
+}
+
+export interface RxPadImageRenderGeometry {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Calculate the image rectangle used by the editor preview for contain/crop.
+ * Positioning uses the same percentage semantics as CSS background-position:
+ * the available overflow is distributed from 0% (left/top) to 100% (right/bottom).
+ */
+export function getRxPadImageRenderGeometry(
+  containerWidth: number,
+  containerHeight: number,
+  imageWidthPx: number,
+  imageHeightPx: number,
+  fit: RxPadImageFit,
+  positionX: unknown,
+  positionY: unknown,
+): RxPadImageRenderGeometry | undefined {
+  if (
+    !Number.isFinite(containerWidth) || containerWidth <= 0
+    || !Number.isFinite(containerHeight) || containerHeight <= 0
+    || !Number.isFinite(imageWidthPx) || imageWidthPx <= 0
+    || !Number.isFinite(imageHeightPx) || imageHeightPx <= 0
+  ) {
+    return undefined;
+  }
+
+  const normalizedFit = normalizeRxPadImageFit(fit);
+  if (normalizedFit === "fit") {
+    return { left: 0, top: 0, width: containerWidth, height: containerHeight };
+  }
+
+  const scale = normalizedFit === "contain"
+    ? Math.min(containerWidth / imageWidthPx, containerHeight / imageHeightPx)
+    : Math.max(containerWidth / imageWidthPx, containerHeight / imageHeightPx);
+  const width = imageWidthPx * scale;
+  const height = imageHeightPx * scale;
+  const x = normalizeRxPadImagePosition(positionX) / 100;
+  const y = normalizeRxPadImagePosition(positionY) / 100;
+  const left = (containerWidth - width) * x;
+  const top = (containerHeight - height) * y;
+
+  return {
+    left: left === 0 ? 0 : left,
+    top: top === 0 ? 0 : top,
+    width,
+    height,
+  };
 }
 
 export interface RxPadOverlayContentOption {

@@ -8,6 +8,8 @@ import test from "node:test";
 import { normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
 import {
   constrainRxPadOverlayField,
+  getRxPadImageBackgroundPosition,
+  getRxPadImageRenderGeometry,
   MIN_RX_PAD_FIELD_HEIGHT_MM,
   MIN_RX_PAD_FIELD_WIDTH_MM,
 } from "@/utils/rxPadOverlay";
@@ -147,6 +149,8 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
   assert.equal(overlay?.paperWidthMm, 123.4);
   assert.equal(overlay?.paperHeightMm, 265.6);
   assert.equal(overlay?.imageFit, "fit");
+  assert.equal(overlay?.imagePositionX, 50);
+  assert.equal(overlay?.imagePositionY, 50);
   assert.deepEqual(
     overlay?.fields.find((candidate) => candidate.id === "patient"),
     {
@@ -250,9 +254,23 @@ test("keeps the selected scan fit behavior in the overlay PDF", () => {
     createdAt: "2026-09-07T00:00:00.000Z",
   };
 
-  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "contain" }), /background-position: center center; background-size: contain;/);
-  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "crop" }), /background-position: center center; background-size: cover;/);
-  assert.match(generateRxPadOverlayHTML(rx, baseOverlay), /background-position: center center; background-size: 100% 100%;/);
+  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "contain" }), /background-position: 50% 50%; background-size: contain;/);
+  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "crop" }), /background-position: 50% 50%; background-size: cover;/);
+  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "contain", imagePositionX: 0, imagePositionY: 100 }), /background-position: 0% 100%; background-size: contain;/);
+  assert.match(generateRxPadOverlayHTML(rx, baseOverlay), /background-position: 50% 50%; background-size: 100% 100%;/);
+});
+
+test("uses the same percentage alignment geometry for contain and crop previews", () => {
+  const centeredContain = getRxPadImageRenderGeometry(200, 300, 400, 400, "contain", 50, 50);
+  assert.deepEqual(centeredContain, { left: 0, top: 50, width: 200, height: 200 });
+
+  const topLeftCrop = getRxPadImageRenderGeometry(200, 300, 400, 400, "crop", 0, 0);
+  assert.deepEqual(topLeftCrop, { left: 0, top: 0, width: 300, height: 300 });
+
+  const bottomRightCrop = getRxPadImageRenderGeometry(200, 300, 400, 400, "crop", 100, 100);
+  assert.deepEqual(bottomRightCrop, { left: -100, top: 0, width: 300, height: 300 });
+
+  assert.equal(getRxPadImageBackgroundPosition(-20, 120), "0% 100%");
 });
 
 test("renders a mismatched-aspect scan at the configured paper size for every fit choice", { skip: !existsSync("/repl/tools/bin/chromium") }, () => {
