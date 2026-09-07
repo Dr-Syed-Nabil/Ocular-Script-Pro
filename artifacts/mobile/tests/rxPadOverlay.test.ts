@@ -105,6 +105,7 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
   assert.equal(overlay?.id, "custom-pad");
   assert.equal(overlay?.paperWidthMm, 123.4);
   assert.equal(overlay?.paperHeightMm, 265.6);
+  assert.equal(overlay?.imageFit, "fit");
   assert.deepEqual(
     overlay?.fields.find((candidate) => candidate.id === "patient"),
     {
@@ -115,6 +116,54 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
       height: 8.5,
     },
   );
+});
+
+test("keeps the selected scan fit behavior in the overlay PDF", () => {
+  const baseOverlay = {
+    id: "custom-pad",
+    name: "Custom pad",
+    imageUri: "data:image/jpeg;base64,scan",
+    paperWidthMm: 123.4,
+    paperHeightMm: 265.6,
+    fields: [],
+  };
+  const rx = {
+    id: "rx-1",
+    patientId: "patient-1",
+    patientName: "Amina Rahman",
+    patientAge: "41",
+    date: "2026-09-07",
+    rightEyeVA: { ua: "", wa: "", ph: "", bcva: "" },
+    leftEyeVA: { ua: "", wa: "", ph: "", bcva: "" },
+    chiefComplaints: "",
+    pastHistory: { dm: false, htn: false, ihd: false, ckd: false, ba: false, thyDs: false, uromax: false, others: "" },
+    adnexa: "",
+    anteriorSegment: "",
+    posteriorSegment: "",
+    gatRight: "",
+    gatLeft: "",
+    drugs: [],
+    rightEyeDistance: { dsp: "", dcyl: "", axis: "", va: "" },
+    leftEyeDistance: { dsp: "", dcyl: "", axis: "", va: "" },
+    rightEyeNear: { dsp: "", dcyl: "", axis: "", va: "" },
+    leftEyeNear: { dsp: "", dcyl: "", axis: "", va: "" },
+    ipd: "",
+    nearIPD: "",
+    addValue: "",
+    lensUsage: "",
+    lensType: "",
+    lensCoating: [],
+    lensMaterial: "",
+    advice: "",
+    adviceBn: "",
+    followUp: "",
+    followUpBn: "",
+    createdAt: "2026-09-07T00:00:00.000Z",
+  };
+
+  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "contain" }), /background-position: center center; background-size: contain;/);
+  assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "crop" }), /background-position: center center; background-size: cover;/);
+  assert.match(generateRxPadOverlayHTML(rx, baseOverlay), /background-position: center center; background-size: 100% 100%;/);
 });
 
 test("emits overlay field geometry and page dimensions in the same millimeters", () => {

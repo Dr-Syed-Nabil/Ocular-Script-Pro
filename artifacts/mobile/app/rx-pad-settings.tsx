@@ -17,15 +17,21 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
-import { RxPadOverlayConfig, RxPadOverlayField } from "@/types";
+import { RxPadImageFit, RxPadOverlayConfig, RxPadOverlayField } from "@/types";
 import {
   constrainRxPadOverlayField,
   constrainRxPadOverlayFields,
+  getRxPadImageResizeMode,
   getRxPadOverlayContentOptions,
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
 
 const PREVIEW_WIDTH = 340;
+const IMAGE_FIT_OPTIONS: Array<{ value: RxPadImageFit; label: string; description: string }> = [
+  { value: "fit", label: "Fit", description: "Fill the paper" },
+  { value: "contain", label: "Contain", description: "Show the whole scan" },
+  { value: "crop", label: "Crop", description: "Fill and trim edges" },
+];
 
 function configuredOverlays(config: { rxPadOverlays?: RxPadOverlayConfig[]; rxPadOverlay?: RxPadOverlayConfig }) {
   return config.rxPadOverlays?.length ? config.rxPadOverlays : config.rxPadOverlay ? [config.rxPadOverlay] : [];
@@ -411,6 +417,33 @@ export default function RxPadSettingsScreen() {
               <Text style={styles.uploadButtonText}>Upload scanned Rx pad</Text>
             </TouchableOpacity>
           )}
+          <Text style={[styles.fitLabel, { color: colors.foreground }]}>Scan fit</Text>
+          <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>
+            Choose how the scan should fit the physical paper. This applies to the preview and printed overlay.
+          </Text>
+          <View style={styles.fitOptions}>
+            {IMAGE_FIT_OPTIONS.map((option) => {
+              const selected = (draft.imageFit || "fit") === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.fitOption,
+                    {
+                      borderColor: selected ? colors.primary : colors.border,
+                      backgroundColor: selected ? colors.secondary : colors.surface,
+                    },
+                  ]}
+                  onPress={() => setDraft((current) => ({ ...current, imageFit: option.value }))}
+                >
+                  <Text style={[styles.fitOptionLabel, { color: selected ? colors.primary : colors.foreground }]}>{option.label}</Text>
+                  <Text style={[styles.fitOptionDescription, { color: colors.mutedForeground }]}>{option.description}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -435,7 +468,7 @@ export default function RxPadSettingsScreen() {
             The preview is scaled to fit this screen. Press and hold a category to move it, or drag the blue corner handle to resize it. The PDF print remains at the physical size entered above.
           </Text>
           <View style={[styles.previewFrame, { width: PREVIEW_WIDTH, height: previewHeight, borderColor: colors.border, backgroundColor: colors.surface }]}>
-            {draft.imageUri ? <Image source={{ uri: draft.imageUri }} style={StyleSheet.absoluteFillObject} resizeMode="stretch" /> : (
+            {draft.imageUri ? <Image source={{ uri: draft.imageUri }} style={StyleSheet.absoluteFillObject} resizeMode={getRxPadImageResizeMode(draft.imageFit || "fit")} /> : (
               <View style={styles.noImage}>
                 <Text style={[styles.noImageText, { color: colors.mutedForeground }]}>Upload a pad scan to preview placement</Text>
               </View>
@@ -556,6 +589,11 @@ const styles = StyleSheet.create({
   imageActions: { flexDirection: "row", gap: 9 },
   secondaryButton: { borderWidth: 1.2, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 10 },
   secondaryButtonText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  fitLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 14, marginBottom: 3 },
+  fitOptions: { flexDirection: "row", gap: 7 },
+  fitOption: { flex: 1, borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 9 },
+  fitOptionLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  fitOptionDescription: { fontSize: 9, lineHeight: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   inputRow: { flexDirection: "row", gap: 9, marginTop: 9 },
   inputLabel: { fontSize: 10, fontFamily: "Inter_500Medium", marginBottom: 4 },
   numberInput: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 8, fontSize: 13, fontFamily: "Inter_400Regular" },

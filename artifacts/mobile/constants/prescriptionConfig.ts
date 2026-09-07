@@ -7,6 +7,7 @@ import {
 } from "@/types";
 import {
   constrainRxPadOverlayField,
+  normalizeRxPadImageFit,
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
 
@@ -236,6 +237,7 @@ function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackNa
     imageUri: typeof saved.imageUri === "string" && saved.imageUri ? saved.imageUri : undefined,
     imageWidthPx: typeof saved.imageWidthPx === "number" && Number.isFinite(saved.imageWidthPx) && saved.imageWidthPx > 0 ? saved.imageWidthPx : undefined,
     imageHeightPx: typeof saved.imageHeightPx === "number" && Number.isFinite(saved.imageHeightPx) && saved.imageHeightPx > 0 ? saved.imageHeightPx : undefined,
+    imageFit: normalizeRxPadImageFit(saved.imageFit),
     paperWidthMm,
     paperHeightMm,
     fields,

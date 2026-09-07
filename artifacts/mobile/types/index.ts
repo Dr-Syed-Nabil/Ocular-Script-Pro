@@ -107,12 +107,15 @@ export interface RxPadOverlayField {
   fontSize: number;
 }
 
+export type RxPadImageFit = "fit" | "contain" | "crop";
+
 export interface RxPadOverlayConfig {
   id: string;
   name: string;
   imageUri?: string;
   imageWidthPx?: number;
   imageHeightPx?: number;
+  imageFit?: RxPadImageFit;
   paperWidthMm: number;
   paperHeightMm: number;
   fields: RxPadOverlayField[];

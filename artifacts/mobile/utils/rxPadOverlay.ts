@@ -1,8 +1,17 @@
-import { RxPadOverlayField } from "@/types";
+import { RxPadImageFit, RxPadOverlayField } from "@/types";
 
 export const MIN_RX_PAD_PAPER_SIZE_MM = 20;
 export const MIN_RX_PAD_FIELD_WIDTH_MM = 5;
 export const MIN_RX_PAD_FIELD_HEIGHT_MM = 4;
+export const DEFAULT_RX_PAD_IMAGE_FIT: RxPadImageFit = "fit";
+
+export function normalizeRxPadImageFit(value: unknown): RxPadImageFit {
+  return value === "contain" || value === "crop" ? value : DEFAULT_RX_PAD_IMAGE_FIT;
+}
+
+export function getRxPadImageResizeMode(fit: RxPadImageFit): "stretch" | "contain" | "cover" {
+  return fit === "contain" ? "contain" : fit === "crop" ? "cover" : "stretch";
+}
 
 export interface RxPadOverlayContentOption {
   id: string;
