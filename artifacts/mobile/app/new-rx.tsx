@@ -1767,8 +1767,6 @@ export default function NewRxScreen() {
             expanded={expandedCategory === "history"}
             onPress={() => toggleCategory("history")}
           >
-          <>
-        ) : null}
         {sectionEnabled("chiefComplaints") ? <>
         <MiniLabel label={categoryTitle("chiefComplaints", sectionTitle("chiefComplaints", "Chief Complaints"))} />
         <TouchableOpacity
@@ -1829,10 +1827,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
+          </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── Visual Acuity ─── */}
-        {sectionEnabled("visualAcuity") ? <>
-        <SectionTitle title={categoryTitle("visualAcuity", sectionTitle("visualAcuity", "Visual Acuity"))} />
+        {sectionEnabled("visualAcuity") ? (
+        <PrescriptionCategoryCard
+          index="03"
+          title={categoryTitle("visualAcuity", sectionTitle("visualAcuity", "Visual Acuity"))}
+          expanded={expandedCategory === "visualAcuity"}
+          onPress={() => toggleCategory("visualAcuity")}
+        >
         <VATable
           reVA={reVA} leVA={leVA}
           onChangeRe={(f, v) => setReVA((p) => ({ ...p, [f]: v }))}
@@ -1853,7 +1858,6 @@ export default function NewRxScreen() {
             }
           }}
         />
-        </> : null}
         <ConfiguredSubsections
           section={prescriptionConfig.sections.find((section) => section.id === "visualAcuity")}
           getValue={getSectionField}
@@ -1864,10 +1868,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 4. Other Examination Findings ─── */}
-        {(sectionEnabled("examination") || sectionEnabled("gat")) ? <>
-        <SectionTitle title={sectionTitle("examination", "Other Examination Findings")} />
+        {(sectionEnabled("examination") || sectionEnabled("gat")) ? (
+        <PrescriptionCategoryCard
+          index="04"
+          title={sectionTitle("examination", "Other Examination Findings")}
+          expanded={expandedCategory === "examination"}
+          onPress={() => toggleCategory("examination")}
+        >
         {sectionEnabled("examination") ? (prescriptionConfig.sections.find((section) => section.id === "examination")?.subsections || [])
           .filter((subsection) => subsection.enabled)
           .map((subsection, index) => {
@@ -1914,11 +1925,17 @@ export default function NewRxScreen() {
           </View>
         </View>
         </View> : null}
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 5. Diagnosis ─── */}
-        {sectionEnabled("diagnosis") ? <>
-        <SectionTitle title={sectionTitle("diagnosis", "Diagnosis")} />
+        {sectionEnabled("diagnosis") ? (
+        <PrescriptionCategoryCard
+          index="05"
+          title={sectionTitle("diagnosis", "Diagnosis")}
+          expanded={expandedCategory === "diagnosis"}
+          onPress={() => toggleCategory("diagnosis")}
+        >
         <ConfigurableTextField
           fieldKey="diagnosis"
           options={prescriptionConfig.sections.find((section) => section.id === "diagnosis")?.options || []}
@@ -1935,11 +1952,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 6. Treatment (Rx) ─── */}
-        {sectionEnabled("drugs") ? <>
-        <SectionTitle title={sectionTitle("drugs", "Treatment (Rx)")} />
+        {sectionEnabled("drugs") ? (
+        <PrescriptionCategoryCard
+          index="06"
+          title={sectionTitle("drugs", "Treatment (Rx)")}
+          expanded={expandedCategory === "drugs"}
+          onPress={() => toggleCategory("drugs")}
+        >
         {drugs.map((drug) => (
           <DrugRow
             key={drug.id}
@@ -1964,11 +1987,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 7. Spectacle Correction ─── */}
-        {(sectionEnabled("spectacle") || sectionEnabled("lens")) ? <>
-        <SectionTitle title={sectionTitle("spectacle", "Spectacle Correction")} />
+        {(sectionEnabled("spectacle") || sectionEnabled("lens")) ? (
+        <PrescriptionCategoryCard
+          index="07"
+          title={sectionTitle("spectacle", "Spectacle Correction")}
+          expanded={expandedCategory === "spectacle"}
+          onPress={() => toggleCategory("spectacle")}
+        >
         {sectionEnabled("spectacle") ? (
         <SpectacleTable
           reD={reD} leD={leD} reN={reN} leN={leN}
@@ -2015,11 +2044,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 8. Investigations ─── */}
-        {sectionEnabled("investigations") ? <>
-        <SectionTitle title={sectionTitle("investigations", "Investigations")} />
+        {sectionEnabled("investigations") ? (
+        <PrescriptionCategoryCard
+          index="08"
+          title={sectionTitle("investigations", "Investigations")}
+          expanded={expandedCategory === "investigations"}
+          onPress={() => toggleCategory("investigations")}
+        >
         <ConfigurableTextField
           fieldKey="investigations"
           options={prescriptionConfig.sections.find((section) => section.id === "investigations")?.options || []}
@@ -2037,11 +2072,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 9. Advice ─── */}
-        {sectionEnabled("advice") ? <>
-        <SectionTitle title={sectionTitle("advice", "Advice/উপদেশ")} />
+        {sectionEnabled("advice") ? (
+        <PrescriptionCategoryCard
+          index="09"
+          title={sectionTitle("advice", "Advice/উপদেশ")}
+          expanded={expandedCategory === "advice"}
+          onPress={() => toggleCategory("advice")}
+        >
         <ConfigurableTextField
           fieldKey="advice"
           options={prescriptionConfig.sections.find((section) => section.id === "advice")?.options || []}
@@ -2073,11 +2114,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* ─── 10. Follow-up ─── */}
-        {sectionEnabled("followUp") ? <>
-        <SectionTitle title={categoryTitle("followUp", sectionTitle("followUp", "Follow-Up Time"))} />
+        {sectionEnabled("followUp") ? (
+        <PrescriptionCategoryCard
+          index="10"
+          title={categoryTitle("followUp", sectionTitle("followUp", "Follow-Up Time"))}
+          expanded={expandedCategory === "followUp"}
+          onPress={() => toggleCategory("followUp")}
+        >
         <ToggleGroup value={followUp}
           onChange={(v) => { setFollowUp(v as string); setFollowUpBn(translateToBangla(v as string)); }}
           options={prescriptionConfig.followUp}
@@ -2103,12 +2150,18 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
-        </> : null}
+        </PrescriptionCategoryCard>
+        ) : null}
 
         {/* Additional custom sections */}
         {prescriptionConfig.sections.filter((section) => !section.builtIn && section.enabled).map((section) => (
-          <View key={section.id}>
-            <SectionTitle title={section.title} />
+          <PrescriptionCategoryCard
+            key={section.id}
+            index="＋"
+            title={section.title}
+            expanded={expandedCategory === `custom:${section.id}`}
+            onPress={() => toggleCategory(`custom:${section.id}`)}
+          >
             <ConfigurableTextField
               fieldKey={`custom_${section.id}`}
               options={section.options || []}
@@ -2130,7 +2183,7 @@ export default function NewRxScreen() {
                 />
               </View>
             ))}
-          </View>
+          </PrescriptionCategoryCard>
         ))}
       </KeyboardAwareScrollView>
     </View>
