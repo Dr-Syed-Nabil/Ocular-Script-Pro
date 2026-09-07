@@ -3,11 +3,13 @@ const EN_TO_BN_DIGIT: Record<string, string> = {
   "5": "৫", "6": "৬", "7": "৭", "8": "৮", "9": "৯",
 };
 
+type Replacement = string | ((match: string, ...captures: string[]) => string);
+
 export function tobnDigits(text: string): string {
   return text.replace(/[0-9]/g, (d) => EN_TO_BN_DIGIT[d] ?? d);
 }
 
-const PHRASE_MAP: [RegExp, string][] = [
+const PHRASE_MAP: [RegExp, Replacement][] = [
   // ── Dosing schedule patterns ──────────────────────────────────────────
   [/\b1\s*\+\s*1\s*\+\s*1\b/gi, "১+১+১"],
   [/\b1\s*\+\s*0\s*\+\s*1\b/gi, "১+০+১"],
@@ -17,7 +19,7 @@ const PHRASE_MAP: [RegExp, string][] = [
   [/\b1\s*\+\s*1\s*\+\s*0\b/gi, "১+১+০"],
   [/\b2\s*\+\s*0\s*\+\s*2\b/gi, "২+০+২"],
   [/\b2\s*\+\s*2\s*\+\s*2\b/gi, "২+২+২"],
-  [/\b(\d)\s*\+\s*(\d)\s*\+\s*(\d)\b/g, (_, a, b, c) =>
+  [/\b(\d)\s*\+\s*(\d)\s*\+\s*(\d)\b/g, (_match: string, a: string, b: string, c: string) =>
     `${tobnDigits(a)}+${tobnDigits(b)}+${tobnDigits(c)}`],
 
   // ── Frequency ──────────────────────────────────────────────────────────
@@ -54,14 +56,14 @@ const PHRASE_MAP: [RegExp, string][] = [
   [/\bBE\b/g, "উভয় চোখে"],
 
   // ── Duration ─────────────────────────────────────────────────────────
-  [/\bfor\s*(\d+)\s*days?\b/gi, (_, n) => `${tobnDigits(n)} দিন পর্যন্ত`],
-  [/\bfor\s*(\d+)\s*weeks?\b/gi, (_, n) => `${tobnDigits(n)} সপ্তাহ পর্যন্ত`],
-  [/\bfor\s*(\d+)\s*months?\b/gi, (_, n) => `${tobnDigits(n)} মাস পর্যন্ত`],
-  [/\bfor\s*(\d+)\s*years?\b/gi, (_, n) => `${tobnDigits(n)} বছর পর্যন্ত`],
-  [/\b(\d+)\s*days?\b/gi, (_, n) => `${tobnDigits(n)} দিন`],
-  [/\b(\d+)\s*weeks?\b/gi, (_, n) => `${tobnDigits(n)} সপ্তাহ`],
-  [/\b(\d+)\s*months?\b/gi, (_, n) => `${tobnDigits(n)} মাস`],
-  [/\b(\d+)\s*years?\b/gi, (_, n) => `${tobnDigits(n)} বছর`],
+  [/\bfor\s*(\d+)\s*days?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} দিন পর্যন্ত`],
+  [/\bfor\s*(\d+)\s*weeks?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} সপ্তাহ পর্যন্ত`],
+  [/\bfor\s*(\d+)\s*months?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} মাস পর্যন্ত`],
+  [/\bfor\s*(\d+)\s*years?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} বছর পর্যন্ত`],
+  [/\b(\d+)\s*days?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} দিন`],
+  [/\b(\d+)\s*weeks?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} সপ্তাহ`],
+  [/\b(\d+)\s*months?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} মাস`],
+  [/\b(\d+)\s*years?\b/gi, (_match: string, n: string) => `${tobnDigits(n)} বছর`],
 
   // ── Follow-up periods ────────────────────────────────────────────────
   [/\b1\s*week\b/gi, "১ সপ্তাহ"],
@@ -113,7 +115,7 @@ const PHRASE_MAP: [RegExp, string][] = [
   [/\btopical\b/gi, "সরাসরি চোখে"],
 
   // ── Remaining plain digits ────────────────────────────────────────────
-  [/\d/g, (d) => tobnDigits(d)],
+  [/\d/g, (d: string) => tobnDigits(d)],
 ];
 
 export function translateToBangla(text: string): string {
@@ -123,7 +125,7 @@ export function translateToBangla(text: string): string {
     if (typeof replacement === "string") {
       result = result.replace(pattern, replacement);
     } else {
-      result = result.replace(pattern, replacement as (...args: string[]) => string);
+      result = result.replace(pattern, replacement);
     }
   }
   return result;
