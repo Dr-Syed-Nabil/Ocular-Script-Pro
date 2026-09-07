@@ -97,6 +97,7 @@ export interface CustomPrescriptionSection {
 
 export interface PrescriptionConfig {
   version: number;
+  categoryTitles?: Record<string, string>;
   chiefComplaints: string[];
   visualAcuity: string[];
   distanceVA: string[];

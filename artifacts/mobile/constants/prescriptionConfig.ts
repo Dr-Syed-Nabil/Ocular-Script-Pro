@@ -59,7 +59,19 @@ export const INVESTIGATION_GROUPS = [
 export const DEFAULT_INVESTIGATION_OPTIONS = INVESTIGATION_GROUPS.flatMap((group) => [...group.options]);
 
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
-  version: 6,
+  version: 7,
+  categoryTitles: {
+    chiefComplaints: "Chief Complaints",
+    visualAcuity: "Visual Acuity",
+    distanceVA: "Distance spectacle VA",
+    nearVA: "Near spectacle VA",
+    drugRoutes: "Drug routes",
+    lensUsage: "Lens usage",
+    lensType: "Lens type",
+    lensCoating: "Lens coating",
+    lensMaterial: "Lens material",
+    followUp: "Follow-up",
+  },
   chiefComplaints: [
     "DOV",
     "Double Vision",
@@ -252,6 +264,14 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
 
   return {
     version: DEFAULT_PRESCRIPTION_CONFIG.version,
+    categoryTitles: Object.fromEntries(
+      Object.entries(DEFAULT_PRESCRIPTION_CONFIG.categoryTitles || {}).map(([id, fallback]) => [
+        id,
+        typeof input.categoryTitles?.[id] === "string" && input.categoryTitles[id].trim()
+          ? input.categoryTitles[id].trim()
+          : fallback,
+      ]),
+    ),
     chiefComplaints,
     visualAcuity: cleanOptions(input.visualAcuity, DEFAULT_PRESCRIPTION_CONFIG.visualAcuity),
     distanceVA: cleanOptions(input.distanceVA, DEFAULT_PRESCRIPTION_CONFIG.distanceVA),

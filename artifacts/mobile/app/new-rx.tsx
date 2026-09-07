@@ -45,6 +45,7 @@ import {
   Patient,
   CustomPrescriptionSection,
   ConfigurableFieldValue,
+  PrescriptionSectionConfig,
 } from "@/types";
 import { INVESTIGATION_GROUPS } from "@/constants/prescriptionConfig";
 
@@ -329,6 +330,64 @@ function ConfigurableTextField({
         placeholder={placeholder}
         minHeight={minHeight}
         multiline
+      />
+    </View>
+  );
+}
+
+function ConfiguredSubsections({
+  section,
+  getValue,
+  onChange,
+}: {
+  section?: PrescriptionSectionConfig;
+  getValue: (key: string) => ConfigurableFieldValue;
+  onChange: (key: string, value: ConfigurableFieldValue) => void;
+}) {
+  if (!section?.subsections?.length) return null;
+  return (
+    <View style={{ gap: 10, marginTop: 12 }}>
+      {section.subsections.filter((subsection) => subsection.enabled).map((subsection) => {
+        const fieldKey = `configured:${section.id}:${subsection.id}`;
+        return (
+          <View key={fieldKey}>
+            <MiniLabel label={subsection.title} />
+            <ConfigurableTextField
+              fieldKey={fieldKey}
+              options={subsection.options}
+              value={getValue(fieldKey)}
+              onChange={(value) => onChange(fieldKey, value)}
+              placeholder={`Enter ${subsection.title.toLowerCase()}…`}
+              minHeight={70}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function ConfiguredSectionOptions({
+  section,
+  getValue,
+  onChange,
+}: {
+  section?: PrescriptionSectionConfig;
+  getValue: (key: string) => ConfigurableFieldValue;
+  onChange: (key: string, value: ConfigurableFieldValue) => void;
+}) {
+  if (!section?.options?.length) return null;
+  const fieldKey = `configured-section:${section.id}`;
+  return (
+    <View style={{ marginTop: 12 }}>
+      <MiniLabel label={`${section.title} options`} />
+      <ConfigurableTextField
+        fieldKey={fieldKey}
+        options={section.options}
+        value={getValue(fieldKey)}
+        onChange={(value) => onChange(fieldKey, value)}
+        placeholder={`Enter ${section.title.toLowerCase()}…`}
+        minHeight={64}
       />
     </View>
   );
@@ -1053,6 +1112,8 @@ export default function NewRxScreen() {
 
   const sectionTitle = (id: string, fallback: string) =>
     prescriptionConfig.sections.find((section) => section.id === id)?.title || fallback;
+  const categoryTitle = (id: string, fallback: string) =>
+    prescriptionConfig.categoryTitles?.[id] || fallback;
   const sectionEnabled = (id: string) =>
     id === "patient" || prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false;
   const getSectionField = (key: string, fallback = ""): ConfigurableFieldValue =>
@@ -1267,6 +1328,24 @@ export default function NewRxScreen() {
           content: configurableFieldText(getSectionField(`examination:${subsection.id}`)),
         }))
         .filter((section) => section.content);
+      const configuredSubsections = prescriptionConfig.sections
+        .filter((section) => section.builtIn && section.id !== "examination")
+        .flatMap((section) => (section.subsections || [])
+          .filter((subsection) => subsection.enabled)
+          .map((subsection) => ({
+            id: `configured:${section.id}:${subsection.id}`,
+            title: `${section.title} — ${subsection.title}`,
+            content: configurableFieldText(getSectionField(`configured:${section.id}:${subsection.id}`)),
+          })))
+        .filter((section) => section.content);
+      const configuredSectionOptions = prescriptionConfig.sections
+        .filter((section) => section.builtIn && !["diagnosis", "investigations", "advice"].includes(section.id) && section.options?.length)
+        .map((section) => ({
+          id: `configured-section:${section.id}`,
+          title: section.title,
+          content: configurableFieldText(getSectionField(`configured-section:${section.id}`)),
+        }))
+        .filter((section) => section.content);
       const prescriptionData = {
         patientId: patient.id, patientName: patient.name, patientAge: formattedPatientAge,
         patientWeight: patientWeight.trim(),
@@ -1285,7 +1364,7 @@ export default function NewRxScreen() {
         lensUsage, lensType, lensCoating, lensMaterial,
         investigations: finalInvestigations,
         advice: finalAdvice, adviceBn, followUp, followUpBn,
-        customSections: [...savedCustomSections, ...extraExaminationSections],
+        customSections: [...savedCustomSections, ...extraExaminationSections, ...configuredSubsections, ...configuredSectionOptions],
         sectionFields: {
           ...sectionFields,
           "examination:adnexa": adnexaField,
@@ -1361,7 +1440,7 @@ export default function NewRxScreen() {
           <View style={s.complaintModal}>
             <View style={s.modalHeader}>
               <View>
-                <Text style={s.modalTitle}>Chief Complaints</Text>
+                <Text style={s.modalTitle}>{categoryTitle("chiefComplaints", "Chief Complaints")}</Text>
                 <Text style={s.modalSub}>Select symptoms and the affected eye</Text>
               </View>
               <TouchableOpacity style={s.modalClose} onPress={() => setShowComplaintPicker(false)}>
@@ -1580,13 +1659,23 @@ export default function NewRxScreen() {
             </Text>
           </View>
         </View>
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "patient")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "patient")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
 
         {/* ─── 2. History ─── */}
         {(sectionEnabled("chiefComplaints") || sectionEnabled("pastHistory")) ? (
           <SectionTitle title={sectionTitle("pastHistory", "History")} />
         ) : null}
         {sectionEnabled("chiefComplaints") ? <>
-        <MiniLabel label={sectionTitle("chiefComplaints", "Chief Complaints")} />
+        <MiniLabel label={categoryTitle("chiefComplaints", sectionTitle("chiefComplaints", "Chief Complaints"))} />
         <TouchableOpacity
           style={s.complaintField}
           onPress={() => setShowComplaintPicker(true)}
@@ -1625,15 +1714,38 @@ export default function NewRxScreen() {
           />
         </View>
         </> : null}
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "chiefComplaints")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "pastHistory")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "chiefComplaints")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "pastHistory")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
 
         {/* ─── Visual Acuity ─── */}
         {sectionEnabled("visualAcuity") ? <>
-        <SectionTitle title={sectionTitle("visualAcuity", "Visual Acuity")} />
+        <SectionTitle title={categoryTitle("visualAcuity", sectionTitle("visualAcuity", "Visual Acuity"))} />
         <VATable
           reVA={reVA} leVA={leVA}
           onChangeRe={(f, v) => setReVA((p) => ({ ...p, [f]: v }))}
           onChangeLe={(f, v) => setLeVA((p) => ({ ...p, [f]: v }))}
-          options={prescriptionConfig.visualAcuity}
+          options={[
+            ...prescriptionConfig.visualAcuity,
+            ...(prescriptionConfig.sections.find((section) => section.id === "visualAcuity")?.options || []),
+          ].filter((option, index, all) => all.findIndex((item) => item.toLowerCase() === option.toLowerCase()) === index)}
           mode={vaMode}
           onModeChange={(mode) => {
             setVaMode(mode);
@@ -1647,6 +1759,16 @@ export default function NewRxScreen() {
           }}
         />
         </> : null}
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "visualAcuity")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "visualAcuity")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
 
         {/* ─── 4. Other Examination Findings ─── */}
         {(sectionEnabled("examination") || sectionEnabled("gat")) ? <>
@@ -1678,6 +1800,11 @@ export default function NewRxScreen() {
               </View>
             );
           }) : null}
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "examination")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
         {sectionEnabled("gat") ? <View style={{ marginTop: 12 }}>
         <MiniLabel label={sectionTitle("gat", "IOP")} />
         <View style={s.row}>
@@ -1708,6 +1835,11 @@ export default function NewRxScreen() {
           placeholder="Enter diagnosis…"
           minHeight={80}
         />
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "diagnosis")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
         </> : null}
 
         {/* ─── 6. Treatment (Rx) ─── */}
@@ -1727,6 +1859,16 @@ export default function NewRxScreen() {
           <Feather name="plus" size={16} color={colors.primary} style={{ marginRight: 6 }} />
           <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.primary }}>Add Drug</Text>
         </TouchableOpacity>
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "drugs")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "drugs")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
         </> : null}
 
         {/* ─── 7. Spectacle Correction ─── */}
@@ -1746,18 +1888,38 @@ export default function NewRxScreen() {
         ) : null}
         {sectionEnabled("lens") ? <View style={{ marginTop: 14 }}>
         <MiniLabel label={sectionTitle("lens", "Lens Options")} />
-        <MiniLabel label="Usage" />
+        <MiniLabel label={categoryTitle("lensUsage", "Usage")} />
         <ToggleGroup value={lensUsage} onChange={(v) => setLensUsage(v as string)} options={prescriptionConfig.lensUsage} />
         <View style={{ height: 12 }} />
-        <MiniLabel label="Type" />
+        <MiniLabel label={categoryTitle("lensType", "Type")} />
         <ToggleGroup value={lensType} onChange={(v) => setLensType(v as string)} options={prescriptionConfig.lensType} />
         <View style={{ height: 12 }} />
-        <MiniLabel label="Coating" />
+        <MiniLabel label={categoryTitle("lensCoating", "Coating")} />
         <ToggleGroup value={lensCoating} onChange={(v) => setLensCoating(v as string[])} options={prescriptionConfig.lensCoating} multi />
         <View style={{ height: 12 }} />
-        <MiniLabel label="Material" />
+        <MiniLabel label={categoryTitle("lensMaterial", "Material")} />
         <ToggleGroup value={lensMaterial} onChange={(v) => setLensMaterial(v as string)} options={prescriptionConfig.lensMaterial} />
         </View> : null}
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "spectacle")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "lens")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "spectacle")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "lens")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
         </> : null}
 
         {/* ─── 8. Investigations ─── */}
@@ -1774,6 +1936,11 @@ export default function NewRxScreen() {
           }}
           placeholder="Enter requested investigations…"
           minHeight={80}
+        />
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "investigations")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
         />
         </> : null}
 
@@ -1806,11 +1973,16 @@ export default function NewRxScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "advice")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
         </> : null}
 
         {/* ─── 10. Follow-up ─── */}
         {sectionEnabled("followUp") ? <>
-        <SectionTitle title={sectionTitle("followUp", "Follow-Up Time")} />
+        <SectionTitle title={categoryTitle("followUp", sectionTitle("followUp", "Follow-Up Time"))} />
         <ToggleGroup value={followUp}
           onChange={(v) => { setFollowUp(v as string); setFollowUpBn(translateToBangla(v as string)); }}
           options={prescriptionConfig.followUp}
@@ -1826,6 +1998,16 @@ export default function NewRxScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+        <ConfiguredSubsections
+          section={prescriptionConfig.sections.find((section) => section.id === "followUp")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
+        <ConfiguredSectionOptions
+          section={prescriptionConfig.sections.find((section) => section.id === "followUp")}
+          getValue={getSectionField}
+          onChange={updateSectionField}
+        />
         </> : null}
 
         {/* Additional custom sections */}

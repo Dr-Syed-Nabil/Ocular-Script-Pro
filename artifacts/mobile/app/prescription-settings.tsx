@@ -23,11 +23,13 @@ function OptionEditor({
   description,
   options,
   onChange,
+  onTitleChange,
 }: {
   title: string;
   description: string;
   options: string[];
   onChange: (options: string[]) => void;
+  onTitleChange?: (title: string) => void;
 }) {
   const colors = useColors();
   const [newValue, setNewValue] = useState("");
@@ -46,7 +48,17 @@ function OptionEditor({
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.cardTitle, { color: colors.foreground }]}>{title}</Text>
+      {onTitleChange ? (
+        <TextInput
+          style={[styles.cardTitleInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+          value={title}
+          onChangeText={onTitleChange}
+          placeholder="Category name"
+          placeholderTextColor={colors.mutedForeground}
+        />
+      ) : (
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>{title}</Text>
+      )}
       <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>{description}</Text>
       {options.map((option, index) => (
         <View key={`${title}-${index}`} style={[styles.optionRow, { borderBottomColor: colors.border }]}>
@@ -78,6 +90,33 @@ function OptionEditor({
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+function CategoryOptionEditor({
+  id,
+  title,
+  description,
+  options,
+  onTitleChange,
+  onChange,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  options: string[];
+  onTitleChange: (title: string) => void;
+  onChange: (options: string[]) => void;
+}) {
+  return (
+    <OptionEditor
+      key={id}
+      title={title}
+      description={description}
+      options={options}
+      onTitleChange={onTitleChange}
+      onChange={onChange}
+    />
   );
 }
 
@@ -153,7 +192,7 @@ function SectionEditor({
               style={[styles.sectionInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
               value={section.title}
               onChangeText={(title) => update(section.id, { title })}
-              editable={!section.builtIn || section.id !== "patient"}
+              editable
               placeholder="Section title"
               placeholderTextColor={colors.mutedForeground}
             />
@@ -173,16 +212,14 @@ function SectionEditor({
             ) : null}
           </View>
 
-          {["advice", "diagnosis", "investigations"].includes(section.id) || !section.builtIn ? (
-            <OptionEditor
-              title={`${section.title} options`}
-              description="Selectable choices shown above the free-text box."
-              options={section.options || []}
-              onChange={(options) => update(section.id, { options })}
-            />
-          ) : null}
+          <OptionEditor
+            title={`${section.title} options`}
+            description="Pick-to-choose options for this section. Free text remains available."
+            options={section.options || []}
+            onChange={(options) => update(section.id, { options })}
+          />
 
-          {section.id === "examination" || !section.builtIn ? (
+          {
             <View style={styles.subsectionArea}>
               <Text style={[styles.subsectionHeading, { color: colors.foreground }]}>Sub-sections</Text>
               {(section.subsections || []).map((subsection) => (
@@ -229,7 +266,7 @@ function SectionEditor({
                 </TouchableOpacity>
               </View>
             </View>
-          ) : null}
+          }
         </View>
       ))}
       <View style={styles.addRow}>
@@ -307,16 +344,16 @@ export default function PrescriptionSettingsScreen() {
         </View>
 
         <SectionEditor sections={draft.sections} onChange={(sections) => setDraft((current) => ({ ...current, sections }))} />
-        <OptionEditor title="Chief complaints" description="Symptoms shown in the complaint picker." options={draft.chiefComplaints} onChange={(value) => setOptions("chiefComplaints", value)} />
-        <OptionEditor title="Visual acuity" description="Options for UA, WA, PH and BCVA." options={draft.visualAcuity} onChange={(value) => setOptions("visualAcuity", value)} />
-        <OptionEditor title="Distance spectacle VA" description="Options for the VA column in Distance (D), independently for each eye." options={draft.distanceVA} onChange={(value) => setOptions("distanceVA", value)} />
-        <OptionEditor title="Near spectacle VA" description="Options for the VA column in Near (N), independently for RE and LE." options={draft.nearVA} onChange={(value) => setOptions("nearVA", value)} />
-        <OptionEditor title="Drug routes" description="Route chips shown for each medication." options={draft.drugRoutes} onChange={(value) => setOptions("drugRoutes", value)} />
-        <OptionEditor title="Lens usage" description="Usage choices in Lens Options." options={draft.lensUsage} onChange={(value) => setOptions("lensUsage", value)} />
-        <OptionEditor title="Lens type" description="Lens type choices." options={draft.lensType} onChange={(value) => setOptions("lensType", value)} />
-        <OptionEditor title="Lens coating" description="Coating choices; multiple can be selected." options={draft.lensCoating} onChange={(value) => setOptions("lensCoating", value)} />
-        <OptionEditor title="Lens material" description="Material choices." options={draft.lensMaterial} onChange={(value) => setOptions("lensMaterial", value)} />
-        <OptionEditor title="Follow-up" description="Follow-up interval choices." options={draft.followUp} onChange={(value) => setOptions("followUp", value)} />
+        <CategoryOptionEditor id="chiefComplaints" title={draft.categoryTitles?.chiefComplaints || "Chief Complaints"} description="Symptoms shown in the complaint picker." options={draft.chiefComplaints} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, chiefComplaints: title } }))} onChange={(value) => setOptions("chiefComplaints", value)} />
+        <CategoryOptionEditor id="visualAcuity" title={draft.categoryTitles?.visualAcuity || "Visual Acuity"} description="Options for UA, WA, PH and BCVA." options={draft.visualAcuity} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, visualAcuity: title } }))} onChange={(value) => setOptions("visualAcuity", value)} />
+        <CategoryOptionEditor id="distanceVA" title={draft.categoryTitles?.distanceVA || "Distance spectacle VA"} description="Options for the VA column in Distance (D), independently for each eye." options={draft.distanceVA} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, distanceVA: title } }))} onChange={(value) => setOptions("distanceVA", value)} />
+        <CategoryOptionEditor id="nearVA" title={draft.categoryTitles?.nearVA || "Near spectacle VA"} description="Options for the VA column in Near (N), independently for RE and LE." options={draft.nearVA} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, nearVA: title } }))} onChange={(value) => setOptions("nearVA", value)} />
+        <CategoryOptionEditor id="drugRoutes" title={draft.categoryTitles?.drugRoutes || "Drug routes"} description="Legacy medication route choices retained for older prescriptions." options={draft.drugRoutes} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, drugRoutes: title } }))} onChange={(value) => setOptions("drugRoutes", value)} />
+        <CategoryOptionEditor id="lensUsage" title={draft.categoryTitles?.lensUsage || "Lens usage"} description="Usage choices in Lens Options." options={draft.lensUsage} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, lensUsage: title } }))} onChange={(value) => setOptions("lensUsage", value)} />
+        <CategoryOptionEditor id="lensType" title={draft.categoryTitles?.lensType || "Lens type"} description="Lens type choices." options={draft.lensType} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, lensType: title } }))} onChange={(value) => setOptions("lensType", value)} />
+        <CategoryOptionEditor id="lensCoating" title={draft.categoryTitles?.lensCoating || "Lens coating"} description="Coating choices; multiple can be selected." options={draft.lensCoating} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, lensCoating: title } }))} onChange={(value) => setOptions("lensCoating", value)} />
+        <CategoryOptionEditor id="lensMaterial" title={draft.categoryTitles?.lensMaterial || "Lens material"} description="Material choices." options={draft.lensMaterial} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, lensMaterial: title } }))} onChange={(value) => setOptions("lensMaterial", value)} />
+        <CategoryOptionEditor id="followUp" title={draft.categoryTitles?.followUp || "Follow-up"} description="Follow-up interval choices." options={draft.followUp} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, followUp: title } }))} onChange={(value) => setOptions("followUp", value)} />
       </KeyboardAwareScrollView>
     </View>
   );
@@ -335,6 +372,7 @@ const styles = StyleSheet.create({
   infoText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
   card: { borderRadius: 15, borderWidth: 1, padding: 14, marginBottom: 14 },
   cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  cardTitleInput: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, fontSize: 15, fontFamily: "Inter_700Bold" },
   cardDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular", marginTop: 3, marginBottom: 10 },
   optionRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 7, borderBottomWidth: 1 },
   optionInput: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, fontFamily: "Inter_400Regular" },
