@@ -244,6 +244,23 @@ function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackNa
   };
 }
 
+function canonicalizeSavedValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeSavedValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, canonicalizeSavedValue((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
+}
+
+function savedOverlaysMatch(left: unknown, right: unknown): boolean {
+  if (!left || typeof left !== "object" || !right || typeof right !== "object") return false;
+  return JSON.stringify(canonicalizeSavedValue(left)) === JSON.stringify(canonicalizeSavedValue(right));
+}
+
 function normalizeSubsections(
   fallback: PrescriptionSubsectionConfig[] = [],
   savedValue: unknown,
@@ -341,8 +358,20 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
     ? cleanOptions(savedChiefComplaints, DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints)
     : cleanOptions([...DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints, ...savedChiefComplaints], DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints);
   const rawOverlays = Array.isArray(input.rxPadOverlays) ? input.rxPadOverlays : [];
+  const overlayValues = rawOverlays.length ? rawOverlays : [input.rxPadOverlay || DEFAULT_RX_PAD_OVERLAY];
+  const requestedActiveId = typeof input.activeRxPadOverlayId === "string" ? input.activeRxPadOverlayId : undefined;
+  const savedActiveOverlay = input.rxPadOverlay && typeof input.rxPadOverlay === "object"
+    ? input.rxPadOverlay
+    : undefined;
+  const activeCandidates = overlayValues
+    .map((value, index) => ({ value, index, overlay: normalizeRxPadOverlay(value, `rx-pad-${index + 1}`, index === 0 ? "Nabil A4 Rx Pad" : `Rx Pad ${index + 1}`) }))
+    .filter(({ overlay }) => !requestedActiveId || overlay.id === requestedActiveId);
+  const savedActiveCandidate = savedActiveOverlay
+    ? activeCandidates.find(({ value }) => value === savedActiveOverlay || savedOverlaysMatch(value, savedActiveOverlay))
+    : undefined;
+  const activeIndex = savedActiveCandidate?.index ?? activeCandidates[0]?.index ?? 0;
   const usedOverlayIds = new Set<string>();
-  const overlays = (rawOverlays.length ? rawOverlays : [input.rxPadOverlay || DEFAULT_RX_PAD_OVERLAY])
+  const overlays = overlayValues
     .map((value, index) => {
       const overlay = normalizeRxPadOverlay(value, `rx-pad-${index + 1}`, index === 0 ? "Nabil A4 Rx Pad" : `Rx Pad ${index + 1}`);
       let id = overlay.id;
@@ -351,13 +380,12 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
       usedOverlayIds.add(id);
       return id === overlay.id ? overlay : { ...overlay, id };
     });
-  const activeRxPadOverlayId = typeof input.activeRxPadOverlayId === "string" && overlays.some((overlay) => overlay.id === input.activeRxPadOverlayId)
-    ? input.activeRxPadOverlayId
-    : overlays[0].id;
+  const activeRxPadOverlay = overlays[activeIndex] || overlays[0];
+  const activeRxPadOverlayId = activeRxPadOverlay.id;
 
   return {
     version: DEFAULT_PRESCRIPTION_CONFIG.version,
-    rxPadOverlay: overlays.find((overlay) => overlay.id === activeRxPadOverlayId) || overlays[0],
+    rxPadOverlay: activeRxPadOverlay,
     rxPadOverlays: overlays,
     activeRxPadOverlayId,
     categoryTitles: Object.fromEntries(

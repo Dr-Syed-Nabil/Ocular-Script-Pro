@@ -138,6 +138,8 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
   const overlay = reopened.rxPadOverlays?.[0];
 
   assert.equal(overlay?.id, "custom-pad");
+  assert.equal(reopened.activeRxPadOverlayId, "custom-pad");
+  assert.equal(reopened.rxPadOverlay?.id, "custom-pad");
   assert.equal(overlay?.paperWidthMm, 123.4);
   assert.equal(overlay?.paperHeightMm, 265.6);
   assert.equal(overlay?.imageFit, "fit");
@@ -154,6 +156,51 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
       contentSelection: undefined,
     },
   );
+});
+
+test("keeps the selected duplicate overlay active while assigning unique IDs", () => {
+  const savedConfig = {
+    version: 8,
+    activeRxPadOverlayId: "custom-pad",
+    rxPadOverlays: [
+      { ...field, id: "custom-pad", name: "First pad", paperWidthMm: 100, paperHeightMm: 80, fields: [] },
+      { ...field, id: "custom-pad", name: "Selected pad", paperWidthMm: 120, paperHeightMm: 90, fields: [] },
+    ],
+    rxPadOverlay: {
+      ...field,
+      id: "custom-pad",
+      name: "Selected pad",
+      paperWidthMm: 120,
+      paperHeightMm: 90,
+      fields: [],
+    },
+  };
+
+  const reopened = normalizePrescriptionConfig(JSON.parse(JSON.stringify(savedConfig)));
+
+  assert.deepEqual(reopened.rxPadOverlays?.map((overlay) => overlay.id), ["custom-pad", "custom-pad-2"]);
+  assert.equal(reopened.activeRxPadOverlayId, "custom-pad-2");
+  assert.equal(reopened.rxPadOverlay?.name, "Selected pad");
+  assert.equal(reopened.rxPadOverlay?.paperWidthMm, 120);
+});
+
+test("migrates a legacy single overlay into the saved overlay collection", () => {
+  const reopened = normalizePrescriptionConfig({
+    version: 7,
+    rxPadOverlay: {
+      ...field,
+      id: "legacy-pad",
+      name: "Legacy pad",
+      paperWidthMm: 140,
+      paperHeightMm: 200,
+      fields: [],
+    },
+  });
+
+  assert.equal(reopened.rxPadOverlays?.length, 1);
+  assert.equal(reopened.rxPadOverlays?.[0].id, "legacy-pad");
+  assert.equal(reopened.activeRxPadOverlayId, "legacy-pad");
+  assert.equal(reopened.rxPadOverlay?.name, "Legacy pad");
 });
 
 test("keeps the selected scan fit behavior in the overlay PDF", () => {
