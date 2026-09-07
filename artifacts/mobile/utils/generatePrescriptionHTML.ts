@@ -130,15 +130,15 @@ function overlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
     }
     case "visualAcuity": {
       const vaLine = (value: EyeVA) => [
-        include("ua") && `UA ${value?.ua || "—"}`,
-        include("wa") && `WA ${value?.wa || "—"}`,
-        include("ph") && `PH ${value?.ph || "—"}`,
-        include("bcva") && `BCVA ${value?.bcva || "—"}`,
+        include("ua") && value?.ua && `UA ${value.ua}`,
+        include("wa") && value?.wa && `WA ${value.wa}`,
+        include("ph") && value?.ph && `PH ${value.ph}`,
+        include("bcva") && value?.bcva && `BCVA ${value.bcva}`,
       ].filter(Boolean).join(" | ");
       return [
-        `RE: ${vaLine(rx.rightEyeVA)}`,
-        `LE: ${vaLine(rx.leftEyeVA)}`,
-      ].join("\n");
+        vaLine(rx.rightEyeVA) && `RE: ${vaLine(rx.rightEyeVA)}`,
+        vaLine(rx.leftEyeVA) && `LE: ${vaLine(rx.leftEyeVA)}`,
+      ].filter(Boolean).join("\n");
     }
     case "examination":
       return [
@@ -174,8 +174,19 @@ function overlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
         return details.join(" ");
       }).join("\n");
     case "spectacle": {
-      const distance = include("distance") ? `D: RE ${eye(rx.rightEyeDistance)} | LE ${eye(rx.leftEyeDistance)}` : "";
-      const near = include("near") ? `N: RE ${eye(rx.rightEyeNear)} | LE ${eye(rx.leftEyeNear)}` : "";
+      const correctionLine = (label: string, right: EyeSpectacleRx, left: EyeSpectacleRx) => {
+        const rightValue = eye(right);
+        const leftValue = eye(left);
+        return rightValue || leftValue
+          ? `${label}: RE ${rightValue || "—"} | LE ${leftValue || "—"}`
+          : "";
+      };
+      const distance = include("distance")
+        ? correctionLine("D", rx.rightEyeDistance, rx.leftEyeDistance)
+        : "";
+      const near = include("near")
+        ? correctionLine("N", rx.rightEyeNear, rx.leftEyeNear)
+        : "";
       const ipd = include("ipd") && (rx.ipd || rx.nearIPD)
         ? `IPD: ${rx.ipd || "—"}${rx.nearIPD ? ` / Near ${rx.nearIPD}` : ""}`
         : "";

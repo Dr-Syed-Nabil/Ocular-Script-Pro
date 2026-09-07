@@ -8,6 +8,7 @@ import {
   MIN_RX_PAD_FIELD_WIDTH_MM,
 } from "@/utils/rxPadOverlay";
 import { generateRxPadOverlayHTML } from "@/utils/generatePrescriptionHTML";
+import type { Prescription } from "@/types";
 
 const paper = { width: 100, height: 80 };
 const field = {
@@ -19,6 +20,40 @@ const field = {
   width: 20,
   height: 10,
   fontSize: 9,
+};
+
+const emptyPrescription: Prescription = {
+  id: "rx-1",
+  patientId: "patient-1",
+  patientName: "",
+  patientAge: "",
+  date: "2026-09-07",
+  rightEyeVA: { ua: "", wa: "", ph: "", bcva: "" },
+  leftEyeVA: { ua: "", wa: "", ph: "", bcva: "" },
+  chiefComplaints: "",
+  pastHistory: { dm: false, htn: false, ihd: false, ckd: false, ba: false, thyDs: false, uromax: false, others: "" },
+  adnexa: "",
+  anteriorSegment: "",
+  posteriorSegment: "",
+  gatRight: "",
+  gatLeft: "",
+  drugs: [],
+  rightEyeDistance: { dsp: "", dcyl: "", axis: "", va: "" },
+  leftEyeDistance: { dsp: "", dcyl: "", axis: "", va: "" },
+  rightEyeNear: { dsp: "", dcyl: "", axis: "", va: "" },
+  leftEyeNear: { dsp: "", dcyl: "", axis: "", va: "" },
+  ipd: "",
+  nearIPD: "",
+  addValue: "",
+  lensUsage: "",
+  lensType: "",
+  lensCoating: [],
+  lensMaterial: "",
+  advice: "",
+  adviceBn: "",
+  followUp: "",
+  followUpBn: "",
+  createdAt: "2026-09-07T00:00:00.000Z",
 };
 
 test("keeps moved and resized fields inside every paper edge", async (t) => {
@@ -114,6 +149,9 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
       y: 22.25,
       width: 47.75,
       height: 8.5,
+      fontSize: 9,
+      printMode: "all",
+      contentSelection: undefined,
     },
   );
 });
@@ -222,4 +260,46 @@ test("emits overlay field geometry and page dimensions in the same millimeters",
   assert.match(html, /@page \{ size: 123\.4mm 265\.6mm; margin: 0; \}/);
   assert.match(html, /html, body \{ width: 123\.4mm; height: 265\.6mm;/);
   assert.match(html, /<div class="overlay-field" style="left:11\.5mm;top:22\.25mm;width:47\.75mm;height:8\.5mm;font-size:9pt">/);
+});
+
+test("omits disabled and empty fields while escaping multiline values", () => {
+  const html = generateRxPadOverlayHTML(
+    {
+      ...emptyPrescription,
+      patientName: "Disabled patient",
+      chiefComplaints: "   ",
+      diagnosis: '<script>alert("x")</script>\nsecond line & more',
+    },
+    {
+      id: "custom-pad",
+      name: "Custom pad",
+      paperWidthMm: 100,
+      paperHeightMm: 80,
+      fields: [
+        { ...field, id: "patient", enabled: false },
+        { ...field, id: "chiefComplaints", enabled: true },
+        { ...field, id: "diagnosis", enabled: true },
+      ],
+    },
+  );
+
+  assert.equal((html.match(/class="overlay-field"/g) || []).length, 1);
+  assert.match(html, /&lt;script&gt;alert\("x"\)&lt;\/script&gt;<br\/>second line &amp; more/);
+  assert.doesNotMatch(html, /class="overlay-field"[^>]*>Disabled patient/);
+});
+
+test("does not render placeholder-only empty visual acuity or spectacle fields", () => {
+  const html = generateRxPadOverlayHTML(emptyPrescription, {
+    id: "custom-pad",
+    name: "Custom pad",
+    paperWidthMm: 100,
+    paperHeightMm: 80,
+    fields: [
+      { ...field, id: "visualAcuity" },
+      { ...field, id: "spectacle" },
+    ],
+  });
+
+  assert.doesNotMatch(html, /class="overlay-field"/);
+  assert.doesNotMatch(html, /RE:|LE:|D:|N:/);
 });
