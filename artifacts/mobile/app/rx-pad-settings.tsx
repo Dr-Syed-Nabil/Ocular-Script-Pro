@@ -1,5 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
@@ -28,6 +28,7 @@ import {
   normalizeRxPadImagePosition,
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
+import { getRxPadOverlayFieldValue } from "@/utils/generatePrescriptionHTML";
 
 const PREVIEW_WIDTH = 340;
 const IMAGE_FIT_OPTIONS: Array<{ value: RxPadImageFit; label: string; description: string }> = [
@@ -239,7 +240,9 @@ function ImageAlignmentControl({
 export default function RxPadSettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { prescriptionConfig, updatePrescriptionConfig } = useData();
+  const { prescriptionId } = useLocalSearchParams<{ prescriptionId?: string }>();
+  const { prescriptions, prescriptionConfig, updatePrescriptionConfig } = useData();
+  const currentPrescription = prescriptions.find((prescription) => prescription.id === prescriptionId);
   const initialOverlays = configuredOverlays(prescriptionConfig);
   const initialSelectedId = prescriptionConfig.activeRxPadOverlayId || initialOverlays[0]?.id || "rx-pad-1";
   const [templates, setTemplates] = useState<RxPadOverlayConfig[]>(initialOverlays);
@@ -261,6 +264,15 @@ export default function RxPadSettingsScreen() {
   const selectedContentOptions = selectedField ? getRxPadOverlayContentOptions(selectedField.id) : [];
   const selectedContentIds = new Set(selectedField?.contentSelection || []);
   const selectedContentIsPartial = selectedField?.printMode === "selected";
+  const printableFields = currentPrescription
+    ? draft.fields.filter((field) => field.enabled && getRxPadOverlayFieldValue(currentPrescription, field).trim().length > 0)
+    : [];
+  const enabledFieldCount = draft.fields.filter((field) => field.enabled).length;
+  const selectedFieldIsPrintable = Boolean(
+    currentPrescription
+    && selectedField?.enabled
+    && getRxPadOverlayFieldValue(currentPrescription, selectedField).trim().length > 0,
+  );
   const previewScale = PREVIEW_WIDTH / draft.paperWidthMm;
   const previewHeight = draft.paperHeightMm * previewScale;
   const imageFit = normalizeRxPadImageFit(draft.imageFit);
@@ -416,6 +428,60 @@ export default function RxPadSettingsScreen() {
           <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
             Upload a scan of the complete pre-printed pad. Enter its real paper size in millimeters, then press and hold a blue category to move it. Select a category and hold its corner handle to resize it.
           </Text>
+        </View>
+
+        <View
+          accessibilityRole="summary"
+          style={[
+            styles.readinessCard,
+            {
+              backgroundColor: !currentPrescription
+                ? colors.surface
+                : printableFields.length
+                  ? colors.clinicalSoft
+                  : "#FFF3EF",
+              borderColor: !currentPrescription
+                ? colors.border
+                : printableFields.length
+                  ? colors.clinicalAccent
+                  : colors.clinicalWarning,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.readinessIcon,
+              {
+                backgroundColor: !currentPrescription
+                  ? colors.secondary
+                  : printableFields.length
+                    ? colors.clinicalAccent
+                    : "#FADBD5",
+              },
+            ]}
+          >
+            <Feather
+              name={!currentPrescription ? "info" : printableFields.length ? "check" : "alert-triangle"}
+              size={16}
+              color={!currentPrescription ? colors.primary : printableFields.length ? colors.clinicalHero : colors.clinicalWarning}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.readinessTitle, { color: colors.foreground }]}>
+              {!currentPrescription
+                ? "Print readiness"
+                : printableFields.length
+                  ? "Ready to print"
+                  : "Nothing to print"}
+            </Text>
+            <Text style={[styles.readinessText, { color: colors.mutedForeground }]}>
+              {!currentPrescription
+                ? "Open Rx Pad settings from a prescription to check its printable fields."
+                : printableFields.length
+                  ? `${printableFields.length} of ${enabledFieldCount} enabled field${enabledFieldCount === 1 ? "" : "s"} has content for ${currentPrescription.patientName || "this prescription"}.`
+                  : "No enabled Rx Pad field has printable content. Enable a field or enter prescription details."}
+            </Text>
+          </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -591,7 +657,14 @@ export default function RxPadSettingsScreen() {
         {selectedField ? (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.selectedHeader}>
-              <Text style={[styles.cardTitle, { color: colors.foreground }]}>Edit category</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.cardTitle, { color: colors.foreground }]}>Edit category</Text>
+                {currentPrescription ? (
+                  <Text style={[styles.fieldReadiness, { color: selectedFieldIsPrintable ? colors.success : colors.mutedForeground }]}>
+                    {selectedFieldIsPrintable ? "Has printable content" : "No printable content"}
+                  </Text>
+                ) : null}
+              </View>
               <TouchableOpacity
                 style={[styles.visibilityButton, { borderColor: selectedField.enabled ? colors.primary : colors.border, backgroundColor: selectedField.enabled ? colors.secondary : colors.surface }]}
                 onPress={() => updateField(selectedField.id, { enabled: !selectedField.enabled })}
@@ -681,6 +754,11 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 4 },
   infoBox: { borderRadius: 12, padding: 12, marginBottom: 14 },
   infoText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  readinessCard: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 13, borderWidth: 1, padding: 12, marginBottom: 14 },
+  readinessIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  readinessTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  readinessText: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
+  fieldReadiness: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 2 },
   card: { borderRadius: 15, borderWidth: 1, padding: 14, marginBottom: 14 },
   cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   cardDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular", marginTop: 3, marginBottom: 10 },

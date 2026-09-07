@@ -222,7 +222,7 @@ export default function PrescriptionDetailScreen() {
         "No enabled Rx Pad field has printable content. Enable a field or enter prescription details, then try again.",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Review Rx Pad", onPress: () => router.push("/rx-pad-settings") },
+          { text: "Review Rx Pad", onPress: () => router.push(`/rx-pad-settings?prescriptionId=${encodeURIComponent(rx.id)}`) },
         ],
       );
       return;
@@ -337,7 +337,7 @@ export default function PrescriptionDetailScreen() {
               </View>
             </View>
           </TouchableOpacity>
-           <TouchableOpacity style={{ alignItems: "center", padding: 10, marginTop: 4 }} onPress={() => { setShowPrintModal(false); router.push("/rx-pad-settings"); }}>
+           <TouchableOpacity style={{ alignItems: "center", padding: 10, marginTop: 4 }} onPress={() => { setShowPrintModal(false); router.push(`/rx-pad-settings?prescriptionId=${encodeURIComponent(rx.id)}`); }}>
              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>
                Customize Rx Pad Overlay
              </Text>

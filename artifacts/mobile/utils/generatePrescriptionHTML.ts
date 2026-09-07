@@ -103,7 +103,7 @@ function customSectionsHTML(rx: Prescription): string {
     .join("");
 }
 
-function getRxPadOverlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
+export function getRxPadOverlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
   const { id } = field;
   const include = (contentId: string) =>
     field.printMode !== "selected" || Boolean(field.contentSelection?.includes(contentId));
