@@ -5,6 +5,10 @@ import {
   RxPadOverlayConfig,
   RxPadOverlayField,
 } from "@/types";
+import {
+  constrainRxPadOverlayField,
+  normalizeRxPadPaperSize,
+} from "@/utils/rxPadOverlay";
 
 export const INVESTIGATION_GROUPS = [
   {
@@ -210,9 +214,17 @@ function normalizeOverlayField(fallback: RxPadOverlayField, savedValue: unknown)
 
 function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackName = "Rx Pad Overlay"): RxPadOverlayConfig {
   const saved = value && typeof value === "object" ? value as Partial<RxPadOverlayConfig> : {};
+  const paperWidthMm = normalizeRxPadPaperSize(
+    typeof saved.paperWidthMm === "number" ? saved.paperWidthMm : DEFAULT_RX_PAD_OVERLAY.paperWidthMm,
+    DEFAULT_RX_PAD_OVERLAY.paperWidthMm,
+  );
+  const paperHeightMm = normalizeRxPadPaperSize(
+    typeof saved.paperHeightMm === "number" ? saved.paperHeightMm : DEFAULT_RX_PAD_OVERLAY.paperHeightMm,
+    DEFAULT_RX_PAD_OVERLAY.paperHeightMm,
+  );
   const fields = DEFAULT_RX_PAD_OVERLAY.fields.map((fallback) => {
     const savedField = Array.isArray(saved.fields) ? saved.fields.find((item) => item?.id === fallback.id) : undefined;
-    return normalizeOverlayField(fallback, savedField);
+    return constrainRxPadOverlayField(normalizeOverlayField(fallback, savedField), paperWidthMm, paperHeightMm);
   });
   return {
     id: typeof saved.id === "string" && saved.id.trim() ? saved.id.trim() : fallbackId,
@@ -220,8 +232,8 @@ function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackNa
     imageUri: typeof saved.imageUri === "string" && saved.imageUri ? saved.imageUri : undefined,
     imageWidthPx: typeof saved.imageWidthPx === "number" && Number.isFinite(saved.imageWidthPx) && saved.imageWidthPx > 0 ? saved.imageWidthPx : undefined,
     imageHeightPx: typeof saved.imageHeightPx === "number" && Number.isFinite(saved.imageHeightPx) && saved.imageHeightPx > 0 ? saved.imageHeightPx : undefined,
-    paperWidthMm: Math.max(20, typeof saved.paperWidthMm === "number" && Number.isFinite(saved.paperWidthMm) ? saved.paperWidthMm : DEFAULT_RX_PAD_OVERLAY.paperWidthMm),
-    paperHeightMm: Math.max(20, typeof saved.paperHeightMm === "number" && Number.isFinite(saved.paperHeightMm) ? saved.paperHeightMm : DEFAULT_RX_PAD_OVERLAY.paperHeightMm),
+    paperWidthMm,
+    paperHeightMm,
     fields,
   };
 }

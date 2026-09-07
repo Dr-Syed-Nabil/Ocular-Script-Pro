@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { RxPadOverlayConfig, RxPadOverlayField } from "@/types";
+import { constrainRxPadOverlayField, constrainRxPadOverlayFields, normalizeRxPadPaperSize } from "@/utils/rxPadOverlay";
 
 const PREVIEW_WIDTH = 340;
 
@@ -181,8 +182,23 @@ export default function RxPadSettingsScreen() {
   const updateField = (id: string, patch: Partial<RxPadOverlayField>) => {
     setDraft((current) => ({
       ...current,
-      fields: current.fields.map((field) => field.id === id ? { ...field, ...patch } : field),
+      fields: current.fields.map((field) => field.id === id
+        ? constrainRxPadOverlayField({ ...field, ...patch }, current.paperWidthMm, current.paperHeightMm)
+        : field),
     }));
+  };
+
+  const updatePaperSize = (dimension: "paperWidthMm" | "paperHeightMm", value: number) => {
+    setDraft((current) => {
+      const next = {
+        ...current,
+        [dimension]: normalizeRxPadPaperSize(value, current[dimension]),
+      };
+      return {
+        ...next,
+        fields: constrainRxPadOverlayFields(next.fields, next.paperWidthMm, next.paperHeightMm),
+      };
+    });
   };
 
   const selectTemplate = (id: string) => {
@@ -378,8 +394,8 @@ export default function RxPadSettingsScreen() {
             Measure the physical pad with a ruler. Printing uses these dimensions as the PDF page size.
           </Text>
           <View style={styles.inputRow}>
-            <FieldNumberInput label="Width (mm)" value={draft.paperWidthMm} onChange={(value) => setDraft((current) => ({ ...current, paperWidthMm: Math.max(20, value) }))} />
-            <FieldNumberInput label="Height (mm)" value={draft.paperHeightMm} onChange={(value) => setDraft((current) => ({ ...current, paperHeightMm: Math.max(20, value) }))} />
+            <FieldNumberInput label="Width (mm)" value={draft.paperWidthMm} onChange={(value) => updatePaperSize("paperWidthMm", value)} />
+            <FieldNumberInput label="Height (mm)" value={draft.paperHeightMm} onChange={(value) => updatePaperSize("paperHeightMm", value)} />
           </View>
           {draft.imageWidthPx && draft.imageHeightPx ? (
             <Text style={[styles.hint, { color: colors.mutedForeground }]}>
@@ -433,12 +449,12 @@ export default function RxPadSettingsScreen() {
               placeholderTextColor={colors.mutedForeground}
             />
             <View style={styles.inputRow}>
-              <FieldNumberInput label="Left X (mm)" value={selectedField.x} onChange={(value) => updateField(selectedField.id, { x: clamp(value, 0, draft.paperWidthMm - selectedField.width) })} />
-              <FieldNumberInput label="Top Y (mm)" value={selectedField.y} onChange={(value) => updateField(selectedField.id, { y: clamp(value, 0, draft.paperHeightMm - selectedField.height) })} />
+              <FieldNumberInput label="Left X (mm)" value={selectedField.x} onChange={(value) => updateField(selectedField.id, { x: value })} />
+              <FieldNumberInput label="Top Y (mm)" value={selectedField.y} onChange={(value) => updateField(selectedField.id, { y: value })} />
             </View>
             <View style={styles.inputRow}>
-              <FieldNumberInput label="Width (mm)" value={selectedField.width} onChange={(value) => updateField(selectedField.id, { width: clamp(value, 5, draft.paperWidthMm - selectedField.x) })} />
-              <FieldNumberInput label="Height (mm)" value={selectedField.height} onChange={(value) => updateField(selectedField.id, { height: clamp(value, 4, draft.paperHeightMm - selectedField.y) })} />
+              <FieldNumberInput label="Width (mm)" value={selectedField.width} onChange={(value) => updateField(selectedField.id, { width: value })} />
+              <FieldNumberInput label="Height (mm)" value={selectedField.height} onChange={(value) => updateField(selectedField.id, { height: value })} />
               <FieldNumberInput label="Font (pt)" value={selectedField.fontSize} onChange={(value) => updateField(selectedField.id, { fontSize: clamp(value, 5, 48) })} />
             </View>
           </View>

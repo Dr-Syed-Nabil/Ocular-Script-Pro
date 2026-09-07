@@ -1,4 +1,5 @@
 import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig } from "@/types";
+import { constrainRxPadOverlayField, normalizeRxPadPaperSize } from "@/utils/rxPadOverlay";
 
 /* ── helpers ── */
 function esc(s: string | undefined): string {
@@ -511,16 +512,17 @@ export function generateRxPadHTML(rx: Prescription): string {
 }
 
 export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlayConfig): string {
-  const width = Math.max(20, overlay.paperWidthMm);
-  const height = Math.max(20, overlay.paperHeightMm);
+  const width = normalizeRxPadPaperSize(overlay.paperWidthMm, 210);
+  const height = normalizeRxPadPaperSize(overlay.paperHeightMm, 297);
   const imageUri = overlay.imageUri || "";
   const fields = overlay.fields
     .filter((field) => field.enabled)
     .map((field) => {
+      const constrainedField = constrainRxPadOverlayField(field, width, height);
       const value = overlayFieldValue(rx, field.id);
       if (!value.trim()) return "";
       const safeValue = esc(value).replace(/\n/g, "<br/>");
-      return `<div class="overlay-field" style="left:${field.x}mm;top:${field.y}mm;width:${field.width}mm;height:${field.height}mm;font-size:${field.fontSize}pt">${safeValue}</div>`;
+      return `<div class="overlay-field" style="left:${constrainedField.x}mm;top:${constrainedField.y}mm;width:${constrainedField.width}mm;height:${constrainedField.height}mm;font-size:${constrainedField.fontSize}pt">${safeValue}</div>`;
     })
     .join("");
   return `<!DOCTYPE html>
@@ -534,7 +536,7 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: ${width}mm; height: ${height}mm; margin: 0; padding: 0; overflow: hidden; }
   body { font-family: 'Roboto', 'Noto Sans Bengali', Arial, sans-serif; background: transparent; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background-color: #fff; background-image: url("${imageUri.replace(/"/g, "&quot;")}"); background-position: top left; background-size: contain; background-repeat: no-repeat; }
+  .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background-color: #fff; background-image: url("${imageUri.replace(/"/g, "&quot;")}"); background-position: top left; background-size: 100% 100%; background-repeat: no-repeat; }
   .overlay-field { position: absolute; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.22; font-weight: 500; color: #111; }
 </style>
 </head>

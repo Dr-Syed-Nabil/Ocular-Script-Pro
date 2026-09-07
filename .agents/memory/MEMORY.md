@@ -2,3 +2,4 @@
 - [Rx pad scan storage](rx-pad-scan-storage.md) — overlay scans are kept locally for offline, single-device printing; revisit storage limits before scaling.
 - [Clinical data isolation](clinical-data-isolation.md) — local clinical records must be scoped to the authenticated Clerk user and cleared when signed out.
 - [Prescription command deck](prescription-command-deck.md) — the prescriptions home uses a dark clinical hero, date-rail cards, compact filters, and inline Rx review.
+- [Rx pad overlay geometry](rx-pad-overlay-geometry.md) — keep editor, persistence, and PDF placement in one millimeter coordinate system; the scan must fill the configured paper bounds.
