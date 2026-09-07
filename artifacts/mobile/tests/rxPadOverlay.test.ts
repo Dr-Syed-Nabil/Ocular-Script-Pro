@@ -13,7 +13,11 @@ import {
   MIN_RX_PAD_FIELD_HEIGHT_MM,
   MIN_RX_PAD_FIELD_WIDTH_MM,
 } from "@/utils/rxPadOverlay";
-import { generateRxPadOverlayHTML, hasRxPadOverlayContent } from "@/utils/generatePrescriptionHTML";
+import {
+  generateRxPadOverlayHTML,
+  getRxPadPrintDecision,
+  hasRxPadOverlayContent,
+} from "@/utils/generatePrescriptionHTML";
 import type { Prescription } from "@/types";
 
 const paper = { width: 100, height: 80 };
@@ -445,6 +449,49 @@ test("detects when an overlay has no enabled printable fields", () => {
     ),
     true,
   );
+});
+
+test("blocks empty scanned Rx Pad printing on web and native paths", () => {
+  const overlay = {
+    id: "custom-pad",
+    name: "Custom pad",
+    imageUri: "data:image/jpeg;base64,scan",
+    paperWidthMm: 100,
+    paperHeightMm: 80,
+    fields: [{ ...field, id: "diagnosis" }],
+  };
+
+  for (const printPath of ["web", "native"] as const) {
+    assert.deepEqual(
+      getRxPadPrintDecision(emptyPrescription, overlay, printPath),
+      {
+        action: "review",
+        printPath,
+        reviewRoute: "/rx-pad-settings?prescriptionId=rx-1",
+      },
+      `${printPath} must stop before opening its print flow`,
+    );
+  }
+});
+
+test("continues populated scanned Rx Pad printing on web and native paths", () => {
+  const overlay = {
+    id: "custom-pad",
+    name: "Custom pad",
+    imageUri: "data:image/jpeg;base64,scan",
+    paperWidthMm: 100,
+    paperHeightMm: 80,
+    fields: [{ ...field, id: "diagnosis" }],
+  };
+  const populatedPrescription = { ...emptyPrescription, diagnosis: "Cataract" };
+
+  for (const printPath of ["web", "native"] as const) {
+    assert.deepEqual(
+      getRxPadPrintDecision(populatedPrescription, overlay, printPath),
+      { action: "print", printPath },
+      `${printPath} should keep the existing print behavior`,
+    );
+  }
 });
 
 test("keeps overlay HTML output unchanged when a field has printable content", () => {

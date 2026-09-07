@@ -229,6 +229,40 @@ export function hasRxPadOverlayContent(rx: Prescription, overlay: RxPadOverlayCo
   return overlay.fields.some((field) => field.enabled && getRxPadOverlayFieldValue(rx, field).trim().length > 0);
 }
 
+export type RxPadPrintPath = "web" | "native";
+
+export type RxPadPrintDecision =
+  | {
+      action: "review";
+      printPath: RxPadPrintPath;
+      reviewRoute: `/rx-pad-settings?prescriptionId=${string}`;
+    }
+  | {
+      action: "print";
+      printPath: RxPadPrintPath;
+    };
+
+/**
+ * Decide whether the Rx Pad print flow may continue to its platform-specific
+ * print implementation. Keeping this before the web/native split prevents an
+ * empty scanned pad from reaching either print dialog.
+ */
+export function getRxPadPrintDecision(
+  rx: Prescription,
+  overlay: RxPadOverlayConfig | undefined,
+  printPath: RxPadPrintPath,
+): RxPadPrintDecision {
+  if (overlay?.imageUri && !hasRxPadOverlayContent(rx, overlay)) {
+    return {
+      action: "review",
+      printPath,
+      reviewRoute: `/rx-pad-settings?prescriptionId=${encodeURIComponent(rx.id)}`,
+    };
+  }
+
+  return { action: "print", printPath };
+}
+
 function showSection(rx: Prescription, id: string): boolean {
   return !rx.hiddenSections?.includes(id);
 }

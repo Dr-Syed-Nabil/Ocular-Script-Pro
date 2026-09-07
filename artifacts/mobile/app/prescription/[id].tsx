@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
-import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML, hasRxPadOverlayContent } from "@/utils/generatePrescriptionHTML";
+import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML, getRxPadPrintDecision } from "@/utils/generatePrescriptionHTML";
 import { QRDisplay } from "@/components/QRDisplay";
 import QRCodeLib from "qrcode";
 
@@ -214,15 +214,20 @@ export default function PrescriptionDetailScreen() {
     if (!rx) return;
     const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
       || prescriptionConfig.rxPadOverlay;
-    const hasOverlayImage = mode === "pad" && Boolean(activeRxPadOverlay?.imageUri);
-    if (hasOverlayImage && activeRxPadOverlay && !hasRxPadOverlayContent(rx, activeRxPadOverlay)) {
+    const printPath = Platform.OS === "web" ? "web" : "native";
+    const printDecision = getRxPadPrintDecision(
+      rx,
+      mode === "pad" ? activeRxPadOverlay : undefined,
+      printPath,
+    );
+    if (mode === "pad" && printDecision.action === "review") {
       setShowPrintModal(false);
       Alert.alert(
         "Rx Pad is empty",
         "No enabled Rx Pad field has printable content. Enable a field or enter prescription details, then try again.",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Review Rx Pad", onPress: () => router.push(`/rx-pad-settings?prescriptionId=${encodeURIComponent(rx.id)}`) },
+          { text: "Review Rx Pad", onPress: () => router.push(printDecision.reviewRoute) },
         ],
       );
       return;
