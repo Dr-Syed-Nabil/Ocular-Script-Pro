@@ -79,7 +79,7 @@ const DROP_FREQUENCIES = [
 const DROP_SITES = ["ডান", "বাম", "উভয়"];
 const OINTMENT_SITES = ["ক্ষতস্থানে", "ডান চোখের ভিতরে", "বাম চোখের ভিতরে", "উভয় চোখের ভিতরে", "ডান চোখের পাতার উপর", "বাম চোখের পাতার উপর", "উভয় চোখের পাতার উপর"];
 const OINTMENT_FREQUENCIES = ["রাতে ঘুমানোর আগে", "দিনে ৪ বার", "দিনে ৩ বার", "দিনে ২ বার", "দিনে ১ বার"];
-const DURATION_VALUES = ["১", "২", "৩", "৫", "৭", "১৫", "৩০"];
+const DURATION_VALUES = ["১", "২", "৩", "৫", "৭", "১০", "১৫", "৩০"];
 const DURATION_UNITS: DrugDosePhase["durationUnit"][] = ["দিন", "সপ্তাহ", "মাস"];
 
 type AgeUnit = "years" | "months";
