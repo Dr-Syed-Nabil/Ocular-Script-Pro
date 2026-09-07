@@ -124,6 +124,69 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
+function PrescriptionCategoryCard({
+  index,
+  title,
+  expanded,
+  onPress,
+  children,
+}: {
+  index: string;
+  title: string;
+  expanded: boolean;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  const colors = useColors();
+  return (
+    <View style={{
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: expanded ? colors.primary : colors.border,
+      borderRadius: 14,
+      backgroundColor: colors.card,
+      overflow: "hidden",
+    }}>
+      <TouchableOpacity
+        style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 14 }}
+        onPress={onPress}
+        activeOpacity={0.78}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
+      >
+        <View style={{
+          width: 30,
+          height: 30,
+          borderRadius: 10,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: 11,
+          backgroundColor: expanded ? colors.secondary : colors.surface,
+        }}>
+          <Text style={{ color: expanded ? colors.primary : colors.mutedForeground, fontSize: 10, fontFamily: "Inter_700Bold" }}>
+            {index}
+          </Text>
+        </View>
+        <Text style={{
+          flex: 1,
+          color: colors.foreground,
+          fontSize: 14,
+          fontFamily: "Inter_700Bold",
+        }}>
+          {title}
+        </Text>
+        <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color={expanded ? colors.primary : colors.mutedForeground} />
+      </TouchableOpacity>
+      {expanded ? (
+        <View style={{ paddingHorizontal: 14, paddingBottom: 15, borderTopWidth: 1, borderTopColor: colors.border }}>
+          {children}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function MiniLabel({ label }: { label: string }) {
   const colors = useColors();
   return (
@@ -1012,6 +1075,7 @@ export default function NewRxScreen() {
   const [followUpBn, setFollowUpBn] = useState("");
   const [customSections, setCustomSections] = useState<CustomPrescriptionSection[]>([]);
   const [sectionFields, setSectionFields] = useState<Record<string, ConfigurableFieldValue>>({});
+  const [expandedCategory, setExpandedCategory] = useState<string | null>("patient");
 
   const [saving, setSaving] = useState(false);
   const chiefComplaintOptions = useMemo(() => {
@@ -1133,6 +1197,8 @@ export default function NewRxScreen() {
     prescriptionConfig.categoryTitles?.[id] || fallback;
   const sectionEnabled = (id: string) =>
     id === "patient" || prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false;
+  const toggleCategory = (id: string) =>
+    setExpandedCategory((current) => current === id ? null : id);
   const getSectionField = (key: string, fallback = ""): ConfigurableFieldValue =>
     sectionFields[key] || { selectedOptions: [], freeText: fallback };
   const updateSectionField = (key: string, value: ConfigurableFieldValue) =>
@@ -1551,7 +1617,12 @@ export default function NewRxScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* ─── 1. Patient Particulars ─── */}
-        <SectionTitle title={sectionTitle("patient", "Patient Particulars")} />
+        <PrescriptionCategoryCard
+          index="01"
+          title={sectionTitle("patient", "Patient Particulars")}
+          expanded={expandedCategory === "patient"}
+          onPress={() => toggleCategory("patient")}
+        >
         <MiniLabel label="Name of the patient" />
         {!isNewPatient ? (
           <View>
@@ -1686,10 +1757,17 @@ export default function NewRxScreen() {
           getValue={getSectionField}
           onChange={updateSectionField}
         />
+        </PrescriptionCategoryCard>
 
         {/* ─── 2. History ─── */}
         {(sectionEnabled("chiefComplaints") || sectionEnabled("pastHistory")) ? (
-          <SectionTitle title={sectionTitle("pastHistory", "History")} />
+          <PrescriptionCategoryCard
+            index="02"
+            title={sectionTitle("pastHistory", "History")}
+            expanded={expandedCategory === "history"}
+            onPress={() => toggleCategory("history")}
+          >
+          <>
         ) : null}
         {sectionEnabled("chiefComplaints") ? <>
         <MiniLabel label={categoryTitle("chiefComplaints", sectionTitle("chiefComplaints", "Chief Complaints"))} />
