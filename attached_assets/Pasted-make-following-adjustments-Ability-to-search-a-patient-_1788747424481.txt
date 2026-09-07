@@ -1,0 +1,114 @@
+make following adjustments
+Ability to search a patient by
+name
+phone number
+PUID
+In "Age of the Patient", it should be number only input with a subsequent prompt of choosing either years or months
+In treatment (Rx) section, massive overhauling needs to be done. 
+Atfirst drug formulation is to be chosen, that is, any one of the following to be chosen 
+Tablet
+Capsule 
+Syrup 
+Eye Drop/Gel
+Eye Ointment 
+Topical Ointment/Cream
+Then drug name entry option, where suggestion to choose from, should prop up from previous entries or the drug database according to its frequency of use, as the name is being typed. For example, upon typing the letter "O", all the drugs in the database starting with letter "O" should be suggested. The suggestions must be arranged according to the frequency of use, as in, "Optimox" & "Optafenac TS" both of these get suggested upon typing "O". But the app must be able to recognise which of the drugs got used more often than the other previously. From the prescription history, the app must figure this out. If it is found that "Optimox" was previously prescribed more often than "Optafenac TS", then in the suggestions, "Optimox" should be above "Optafenac TS". But if there are no previous entries, or the frequency of usage is the same, then the options should get arranged alphabetically. At max 5 options should get suggested at once.
+Then dosage, according to the formulation selected aforehand dosage preset text and selection options should appear.
+For Tablet & Capsule, following dosage schedule should be suggested
+০+০+১
+০+১+০
+১+০+১
+১+১+১+১
+১+০+০
+২+০+০
+৩+০+০
+৪+০+০
+And, free text entry option should be there too, where the English numbers will automatically get converted to Bangla numbers, for example if in the free text box "2+0+1" is entered, automatically "২+০+১" is shown
+For syrup, following preset text should appear , "১ চা চামচ দিনে ২ বার", where in "১" & "চা-চামচ" & "২ বার" should be editable upon click
+Upon clicking, "১", following options to choose from should appear
+১
+১.৫
+২
+২.৫
+৩
+৩.৫
+৪
+৫
+৭.৫
+১০
+১২.৫
+১৫
+Upon clicking,"চা-চামচ", following options to choose from should appear
+চা-চামচ
+ml
+Upon clicking,"২ বার", following options to choose from should appear
+২ বার
+৩ বার
+৪ বার
+একবার সকালে
+একবার দুপুরে/বিকেলে/সন্ধ্যায় 
+একবার রাতে ঘুমানোর আগে
+For Eye Drop/Gel, following preset text should appear, "১ ফোঁটা করে ৪ ঘন্টা পরপর বাম চোখে", where in "৪ ঘন্টা পরপর" & "বাম" should be editable upon click
+Upon clicking, "৪ ঘন্টা পরপর", following options to choose from should appear
+৪ ঘণ্টা পরপর
+৫ ঘণ্টা পরপর
+৬ ঘণ্টা পরপর
+৮ ঘণ্টা পরপর
+১২ ঘণ্টা পরপর
+২৪ ঘণ্টা পরপর
+৩ ঘণ্টা পরপর
+২ ঘণ্টা পরপর
+১ ঘণ্টা পরপর
+আধা ঘণ্টা পরপর
+দিনে ২ বার
+দিনে ৩ বার
+দিনে ৪ বার
+দিনে ৫ বার
+দিনে ৬ বার
+দিনে ৮ বার
+দিনে একবার সকালে
+দিনে একবার সন্ধ্যায়
+দিনে একবার রাতে ঘুমানোর আগে
+Upon clicking, "বাম", following options to choose from should appear
+ডান
+বাম
+উভয়
+For Eye Ointment & Topical Ointment/Cream, following preset text should appear, "ক্ষতস্থানে লাগাবেন দিনে ৩ বার", where in "ক্ষতস্থানে" & "দিনে ৩ বার" should be editable upon click
+Upon clicking, "ক্ষতস্থানে", following options to choose from should appear
+ক্ষতস্থানে
+ডান চোখের ভিতরে
+বাম চোখের ভিতরে
+উভয় চোখের ভিতরে
+ডান চোখের পাতার উপর
+বাম চোখের পাতার উপর
+উভয় চোখের পাতার উপর
+Upon clicking, "দিনে ৩ বার", following options to choose from should appear
+রাতে ঘুমানোর আগে
+দিনে ৪ বার
+দিনে ৩ বার
+দিনে ২ বার
+দিনে ১ বার
+Then duration, following the selection the dosage duration selection is separated by a hyphen "-", then this preset text should appear "৭ দিন", where in "৭" & "দিন" should be editable upon click
+Upon clicking, "৭", following options to choose from should appear
+১
+২
+৩
+৫
+৭
+১৫
+৩০
+Upon clicking, "দিন", following options to choose from should appear
+দিন
+সপ্তাহ
+মাস
+Following the completion of a dose schedule & duration, prompt to choose either one of the options, "এবং" & "তারপর" should appear. After selecting one of them, again dose schedule & duration (no. 3 & 4, just the previous two) should be presented. For example 
+in 3.1 - Eye Drop/Gel was selected
+in 3.2 - "Optimox Eye Drop" entered
+in 3.3 - ১ ফোঁটা করে দিনে ৬ বার উভয় চোখে selected
+in 3.4 - ১৫ দিন selected
+in 3.5 - তারপর selected
+options for 3.3 reappears - ১ ফোঁটা করে দিনে ৪ বার উভয় চোখে selected
+options for 3.4 reappears - ৩০ দিন selected
+	       Optimox Eye Drop
+	       ১ ফোঁটা করে দিনে ৬ বার উভয় চোখে - ১৫ দিন
+	তারপর, ১ ফোঁটা করে দিনে ৪ বার উভয় চোখে - ৩০ দিন
