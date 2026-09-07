@@ -106,6 +106,8 @@ export interface RxPadOverlayField {
 }
 
 export interface RxPadOverlayConfig {
+  id: string;
+  name: string;
   imageUri?: string;
   imageWidthPx?: number;
   imageHeightPx?: number;
@@ -126,6 +128,8 @@ export interface PrescriptionConfig {
   version: number;
   categoryTitles?: Record<string, string>;
   rxPadOverlay?: RxPadOverlayConfig;
+  rxPadOverlays?: RxPadOverlayConfig[];
+  activeRxPadOverlayId?: string;
   chiefComplaints: string[];
   visualAcuity: string[];
   distanceVA: string[];

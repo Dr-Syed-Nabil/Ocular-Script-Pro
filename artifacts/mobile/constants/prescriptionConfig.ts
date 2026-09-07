@@ -67,22 +67,24 @@ export const DEFAULT_INVESTIGATION_OPTIONS = INVESTIGATION_GROUPS.flatMap((group
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
   version: 8,
   rxPadOverlay: {
+    id: "nabil-a4-pad",
+    name: "Nabil A4 Rx Pad",
     paperWidthMm: 210,
     paperHeightMm: 297,
     fields: [
-      { id: "patient", label: "Patient particulars", enabled: true, x: 14, y: 10, width: 182, height: 12, fontSize: 10 },
-      { id: "chiefComplaints", label: "Chief complaints", enabled: true, x: 14, y: 25, width: 182, height: 14, fontSize: 10 },
-      { id: "pastHistory", label: "History", enabled: true, x: 14, y: 42, width: 182, height: 12, fontSize: 9 },
-      { id: "visualAcuity", label: "Visual acuity", enabled: true, x: 14, y: 57, width: 182, height: 22, fontSize: 9 },
-      { id: "examination", label: "Examination findings", enabled: true, x: 14, y: 82, width: 182, height: 24, fontSize: 9 },
-      { id: "gat", label: "IOP", enabled: true, x: 14, y: 109, width: 182, height: 10, fontSize: 9 },
-      { id: "diagnosis", label: "Diagnosis", enabled: true, x: 14, y: 122, width: 182, height: 16, fontSize: 10 },
-      { id: "drugs", label: "Treatment (Rx)", enabled: true, x: 14, y: 141, width: 182, height: 45, fontSize: 9 },
-      { id: "spectacle", label: "Spectacle correction", enabled: true, x: 14, y: 189, width: 182, height: 28, fontSize: 9 },
-      { id: "lens", label: "Lens options", enabled: true, x: 14, y: 220, width: 182, height: 12, fontSize: 9 },
-      { id: "investigations", label: "Investigations", enabled: true, x: 14, y: 235, width: 182, height: 12, fontSize: 9 },
-      { id: "advice", label: "Advice", enabled: true, x: 14, y: 250, width: 182, height: 22, fontSize: 9 },
-      { id: "followUp", label: "Follow-up", enabled: true, x: 14, y: 277, width: 182, height: 12, fontSize: 9 },
+      { id: "patient", label: "Patient particulars", enabled: true, x: 6, y: 27, width: 198, height: 8, fontSize: 9 },
+      { id: "chiefComplaints", label: "Chief complaints", enabled: true, x: 42, y: 35, width: 112, height: 10, fontSize: 9 },
+      { id: "pastHistory", label: "History", enabled: true, x: 159, y: 36, width: 44, height: 24, fontSize: 8 },
+      { id: "visualAcuity", label: "Visual acuity", enabled: true, x: 6, y: 35, width: 36, height: 20, fontSize: 8 },
+      { id: "examination", label: "Examination findings", enabled: true, x: 6, y: 55, width: 36, height: 150, fontSize: 8 },
+      { id: "gat", label: "IOP", enabled: true, x: 6, y: 205, width: 36, height: 8, fontSize: 8 },
+      { id: "diagnosis", label: "Diagnosis", enabled: true, x: 42, y: 47, width: 112, height: 10, fontSize: 9 },
+      { id: "drugs", label: "Treatment (Rx)", enabled: true, x: 42, y: 58, width: 112, height: 143, fontSize: 9 },
+      { id: "spectacle", label: "Spectacle correction", enabled: true, x: 6, y: 221, width: 138, height: 32, fontSize: 8 },
+      { id: "lens", label: "Lens options", enabled: true, x: 145, y: 221, width: 58, height: 32, fontSize: 8 },
+      { id: "investigations", label: "Investigations", enabled: true, x: 42, y: 202, width: 112, height: 12, fontSize: 8 },
+      { id: "advice", label: "Advice", enabled: true, x: 159, y: 62, width: 44, height: 145, fontSize: 8 },
+      { id: "followUp", label: "Follow-up", enabled: true, x: 159, y: 216, width: 44, height: 12, fontSize: 8 },
     ],
   },
   categoryTitles: {
@@ -206,13 +208,15 @@ function normalizeOverlayField(fallback: RxPadOverlayField, savedValue: unknown)
   };
 }
 
-function normalizeRxPadOverlay(value: unknown): RxPadOverlayConfig {
+function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackName = "Rx Pad Overlay"): RxPadOverlayConfig {
   const saved = value && typeof value === "object" ? value as Partial<RxPadOverlayConfig> : {};
   const fields = DEFAULT_RX_PAD_OVERLAY.fields.map((fallback) => {
     const savedField = Array.isArray(saved.fields) ? saved.fields.find((item) => item?.id === fallback.id) : undefined;
     return normalizeOverlayField(fallback, savedField);
   });
   return {
+    id: typeof saved.id === "string" && saved.id.trim() ? saved.id.trim() : fallbackId,
+    name: typeof saved.name === "string" && saved.name.trim() ? saved.name.trim() : fallbackName,
     imageUri: typeof saved.imageUri === "string" && saved.imageUri ? saved.imageUri : undefined,
     imageWidthPx: typeof saved.imageWidthPx === "number" ? saved.imageWidthPx : undefined,
     imageHeightPx: typeof saved.imageHeightPx === "number" ? saved.imageHeightPx : undefined,
@@ -320,10 +324,18 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
   const chiefComplaints = input.version && input.version >= 3
     ? cleanOptions(savedChiefComplaints, DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints)
     : cleanOptions([...DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints, ...savedChiefComplaints], DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints);
+  const rawOverlays = Array.isArray(input.rxPadOverlays) ? input.rxPadOverlays : [];
+  const overlays = (rawOverlays.length ? rawOverlays : [input.rxPadOverlay || DEFAULT_RX_PAD_OVERLAY])
+    .map((value, index) => normalizeRxPadOverlay(value, `rx-pad-${index + 1}`, index === 0 ? "Nabil A4 Rx Pad" : `Rx Pad ${index + 1}`));
+  const activeRxPadOverlayId = typeof input.activeRxPadOverlayId === "string" && overlays.some((overlay) => overlay.id === input.activeRxPadOverlayId)
+    ? input.activeRxPadOverlayId
+    : overlays[0].id;
 
   return {
     version: DEFAULT_PRESCRIPTION_CONFIG.version,
-    rxPadOverlay: normalizeRxPadOverlay(input.rxPadOverlay),
+    rxPadOverlay: overlays.find((overlay) => overlay.id === activeRxPadOverlayId) || overlays[0],
+    rxPadOverlays: overlays,
+    activeRxPadOverlayId,
     categoryTitles: Object.fromEntries(
       Object.entries(DEFAULT_PRESCRIPTION_CONFIG.categoryTitles || {}).map(([id, fallback]) => [
         id,

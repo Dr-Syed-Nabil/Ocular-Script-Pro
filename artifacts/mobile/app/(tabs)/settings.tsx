@@ -56,7 +56,7 @@ function Field({ label, value, onChange, placeholder, multiline, keyboard }: {
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { doctor, updateDoctor } = useData();
+  const { doctor, updateDoctor, prescriptionConfig, updatePrescriptionConfig } = useData();
   const { signOut } = useClerk();
   const { user } = useUser();
   const { getAvailability, list, enroll, revoke } = useBiometricCredentials();
@@ -117,6 +117,23 @@ export default function SettingsScreen() {
     await updateDoctor(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const rxPadOverlays = prescriptionConfig.rxPadOverlays?.length
+    ? prescriptionConfig.rxPadOverlays
+    : prescriptionConfig.rxPadOverlay
+      ? [prescriptionConfig.rxPadOverlay]
+      : [];
+  const activeRxPadId = prescriptionConfig.activeRxPadOverlayId || rxPadOverlays[0]?.id;
+  const selectRxPad = async (id: string) => {
+    const active = rxPadOverlays.find((overlay) => overlay.id === id);
+    if (!active) return;
+    await updatePrescriptionConfig({
+      ...prescriptionConfig,
+      rxPadOverlays,
+      activeRxPadOverlayId: id,
+      rxPadOverlay: active,
+    });
   };
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -199,6 +216,33 @@ export default function SettingsScreen() {
             <Feather name="sliders" size={17} color={colors.primary} style={{ marginRight: 8 }} />
             <Text style={s.changePasswordText}>Customize prescription form</Text>
           </TouchableOpacity>
+          <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.foreground, marginTop: 16, marginBottom: 7 }}>
+            Rx Pad for printing
+          </Text>
+          <Text style={{ fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 10 }}>
+            Choose which saved pre-printed pad should be used when you select Rx Pad Overlay during printing.
+          </Text>
+          {rxPadOverlays.map((overlay) => (
+            <TouchableOpacity
+              key={overlay.id}
+              style={[s.rxPadChoice, activeRxPadId === overlay.id && s.rxPadChoiceActive]}
+              onPress={() => void selectRxPad(overlay.id)}
+              activeOpacity={0.8}
+            >
+              <View style={[s.rxPadRadio, activeRxPadId === overlay.id && s.rxPadRadioActive]}>
+                {activeRxPadId === overlay.id ? <View style={s.rxPadRadioDot} /> : null}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rxPadChoiceTitle}>{overlay.name}</Text>
+                <Text style={s.rxPadChoiceMeta}>{overlay.paperWidthMm} × {overlay.paperHeightMm} mm</Text>
+              </View>
+              {activeRxPadId === overlay.id ? <Text style={s.rxPadActive}>Active</Text> : null}
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={s.changePasswordBtn} onPress={() => router.push("/rx-pad-settings")} activeOpacity={0.85}>
+            <Feather name="layout" size={17} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={s.changePasswordText}>Manage Rx Pad Overlays</Text>
+          </TouchableOpacity>
         </FieldGroup>
 
         <FieldGroup title="Account">
@@ -267,6 +311,14 @@ const styles = (colors: ReturnType<typeof useColors>) =>
       backgroundColor: colors.secondary, borderRadius: 10, padding: 12,
     },
     infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 18 },
+    rxPadChoice: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1.2, borderColor: colors.border, borderRadius: 10, padding: 10, marginBottom: 8, backgroundColor: colors.surface },
+    rxPadChoiceActive: { borderColor: colors.primary, backgroundColor: colors.secondary },
+    rxPadRadio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+    rxPadRadioActive: { borderColor: colors.primary },
+    rxPadRadioDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary },
+    rxPadChoiceTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    rxPadChoiceMeta: { fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 },
+    rxPadActive: { fontSize: 10, fontFamily: "Inter_700Bold", color: colors.primary },
     signOutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.destructive + "50", borderRadius: 11, paddingVertical: 12 },
     signOutText: { color: colors.destructive, fontSize: 14, fontFamily: "Inter_600SemiBold" },
     changePasswordBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.primary + "50", borderRadius: 11, paddingVertical: 12, marginBottom: 10 },

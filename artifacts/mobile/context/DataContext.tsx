@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { Image } from "react-native";
 import { DoctorProfile, Patient, Prescription, PrescriptionConfig } from "@/types";
 import { DEFAULT_PRESCRIPTION_CONFIG, normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
 
@@ -13,6 +14,24 @@ const PRESCRIPTIONS_KEY = "@optiscript_prescriptions";
 const PATIENTS_KEY = "@optiscript_patients";
 const DOCTOR_KEY = "@optiscript_doctor";
 const PRESCRIPTION_CONFIG_KEY = "@optiscript_prescription_config";
+const DEFAULT_RX_PAD_IMAGE = require("../assets/images/nabil-rx-pad-a4.jpg");
+
+function withBundledRxPadTemplate(config: PrescriptionConfig): PrescriptionConfig {
+  if (config.rxPadOverlays?.some((overlay) => overlay.imageUri)) return config;
+  const imageUri = Image.resolveAssetSource(DEFAULT_RX_PAD_IMAGE).uri;
+  const overlays = (config.rxPadOverlays || []).map((overlay, index) =>
+    index === 0
+      ? { ...overlay, imageUri, imageWidthPx: 1080, imageHeightPx: 1505, paperWidthMm: 210, paperHeightMm: 297 }
+      : overlay
+  );
+  const activeId = config.activeRxPadOverlayId || overlays[0]?.id;
+  return {
+    ...config,
+    rxPadOverlays: overlays,
+    activeRxPadOverlayId: activeId,
+    rxPadOverlay: overlays.find((overlay) => overlay.id === activeId) || overlays[0],
+  };
+}
 
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -115,7 +134,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           setPatients(migrated);
         }
         if (dRaw) setDoctor({ ...DEFAULT_DOCTOR, ...JSON.parse(dRaw) });
-        if (configRaw) setPrescriptionConfig(normalizePrescriptionConfig(JSON.parse(configRaw)));
+        const savedConfig = configRaw ? JSON.parse(configRaw) : undefined;
+        const normalizedConfig = withBundledRxPadTemplate(normalizePrescriptionConfig(savedConfig));
+        setPrescriptionConfig(normalizedConfig);
+        if (!configRaw || !savedConfig?.rxPadOverlays?.some((overlay: { imageUri?: string }) => overlay.imageUri)) {
+          await AsyncStorage.setItem(PRESCRIPTION_CONFIG_KEY, JSON.stringify(normalizedConfig));
+        }
       } catch {
       } finally {
         setLoading(false);

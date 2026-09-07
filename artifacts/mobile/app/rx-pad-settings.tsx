@@ -20,6 +20,10 @@ import { RxPadOverlayConfig, RxPadOverlayField } from "@/types";
 
 const PREVIEW_WIDTH = 340;
 
+function configuredOverlays(config: { rxPadOverlays?: RxPadOverlayConfig[]; rxPadOverlay?: RxPadOverlayConfig }) {
+  return config.rxPadOverlays?.length ? config.rxPadOverlays : config.rxPadOverlay ? [config.rxPadOverlay] : [];
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -108,13 +112,22 @@ export default function RxPadSettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { prescriptionConfig, updatePrescriptionConfig } = useData();
-  const [draft, setDraft] = useState<RxPadOverlayConfig>(prescriptionConfig.rxPadOverlay!);
+  const initialOverlays = configuredOverlays(prescriptionConfig);
+  const initialSelectedId = prescriptionConfig.activeRxPadOverlayId || initialOverlays[0]?.id || "rx-pad-1";
+  const [templates, setTemplates] = useState<RxPadOverlayConfig[]>(initialOverlays);
+  const [draft, setDraft] = useState<RxPadOverlayConfig>(initialOverlays.find((overlay) => overlay.id === initialSelectedId) || initialOverlays[0]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialSelectedId);
   const [selectedId, setSelectedId] = useState("patient");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (prescriptionConfig.rxPadOverlay) setDraft(prescriptionConfig.rxPadOverlay);
-  }, [prescriptionConfig.rxPadOverlay]);
+    const incoming = configuredOverlays(prescriptionConfig);
+    if (!incoming.length) return;
+    const activeId = prescriptionConfig.activeRxPadOverlayId || incoming[0].id;
+    setTemplates(incoming);
+    setSelectedTemplateId(activeId);
+    setDraft(incoming.find((overlay) => overlay.id === activeId) || incoming[0]);
+  }, [prescriptionConfig]);
 
   const selectedField = draft.fields.find((field) => field.id === selectedId) || draft.fields[0];
   const previewScale = PREVIEW_WIDTH / draft.paperWidthMm;
@@ -125,6 +138,56 @@ export default function RxPadSettingsScreen() {
       ...current,
       fields: current.fields.map((field) => field.id === id ? { ...field, ...patch } : field),
     }));
+  };
+
+  const selectTemplate = (id: string) => {
+    const committed = templates.map((template) => template.id === selectedTemplateId ? draft : template);
+    const next = committed.find((template) => template.id === id);
+    if (!next) return;
+    setTemplates(committed);
+    setSelectedTemplateId(id);
+    setDraft(next);
+    setSelectedId("patient");
+  };
+
+  const addTemplate = () => {
+    const id = `rx-pad-${Date.now().toString(36)}`;
+    const next: RxPadOverlayConfig = {
+      ...(templates[0] || draft),
+      id,
+      name: "New Rx Pad",
+      imageUri: undefined,
+      imageWidthPx: undefined,
+      imageHeightPx: undefined,
+      fields: (templates[0] || draft).fields.map((field) => ({ ...field })),
+    };
+    const committed = templates.map((template) => template.id === selectedTemplateId ? draft : template);
+    setTemplates([...committed, next]);
+    setSelectedTemplateId(id);
+    setDraft(next);
+    setSelectedId("patient");
+  };
+
+  const deleteTemplate = () => {
+    if (templates.length <= 1) {
+      Alert.alert("Keep one Rx Pad", "At least one Rx Pad Overlay must remain configured.", [{ text: "OK" }]);
+      return;
+    }
+    Alert.alert("Delete this Rx Pad?", "Its saved placement settings will be removed. Existing printed prescriptions are unchanged.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          const remaining = templates.filter((template) => template.id !== selectedTemplateId);
+          const next = remaining[0];
+          setTemplates(remaining);
+          setSelectedTemplateId(next.id);
+          setDraft(next);
+          setSelectedId("patient");
+        },
+      },
+    ]);
   };
 
   const chooseImage = async () => {
@@ -150,7 +213,14 @@ export default function RxPadSettingsScreen() {
   const save = async () => {
     setSaving(true);
     try {
-      await updatePrescriptionConfig({ ...prescriptionConfig, rxPadOverlay: draft });
+      const committed = templates.map((template) => template.id === selectedTemplateId ? draft : template);
+      const active = committed.find((template) => template.id === selectedTemplateId) || committed[0];
+      await updatePrescriptionConfig({
+        ...prescriptionConfig,
+        rxPadOverlays: committed,
+        activeRxPadOverlayId: active.id,
+        rxPadOverlay: active,
+      });
       router.back();
     } finally {
       setSaving(false);
@@ -191,7 +261,53 @@ export default function RxPadSettingsScreen() {
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Pre-printed pad image</Text>
+          <View style={styles.selectedHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: colors.foreground }]}>Saved Rx Pad Overlays</Text>
+              <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>
+                Create multiple pad layouts and choose which one is active from your Profile.
+              </Text>
+            </View>
+            <TouchableOpacity style={[styles.smallAction, { backgroundColor: colors.secondary }]} onPress={addTemplate}>
+              <Text style={[styles.smallActionText, { color: colors.primary }]}>+ New</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ gap: 8 }}>
+            {templates.map((template) => (
+              <TouchableOpacity
+                key={template.id}
+                style={[styles.templateRow, { borderColor: template.id === selectedTemplateId ? colors.primary : colors.border, backgroundColor: template.id === selectedTemplateId ? colors.secondary : colors.surface }]}
+                onPress={() => selectTemplate(template.id)}
+              >
+                <View style={[styles.radio, { borderColor: template.id === selectedTemplateId ? colors.primary : colors.border }]}>
+                  {template.id === selectedTemplateId ? <View style={[styles.radioDot, { backgroundColor: colors.primary }]} /> : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.templateName, { color: colors.foreground }]} numberOfLines={1}>{template.name}</Text>
+                  <Text style={[styles.templateMeta, { color: colors.mutedForeground }]}>{template.paperWidthMm} × {template.paperHeightMm} mm{template.imageUri ? " · scan ready" : " · no scan"}</Text>
+                </View>
+                {template.id === selectedTemplateId ? <Text style={[styles.activeText, { color: colors.primary }]}>Editing</Text> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity style={[styles.deleteTemplateButton, { borderColor: colors.border }]} onPress={deleteTemplate}>
+            <Text style={[styles.secondaryButtonText, { color: colors.destructive }]}>Delete selected overlay</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.selectedHeader}>
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>Edit selected overlay</Text>
+            <Text style={[styles.templateMeta, { color: colors.mutedForeground }]}>{draft.name}</Text>
+          </View>
+          <TextInput
+            style={[styles.textInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+            value={draft.name}
+            onChangeText={(name) => setDraft((current) => ({ ...current, name }))}
+            placeholder="Overlay name"
+            placeholderTextColor={colors.mutedForeground}
+          />
+          <Text style={[styles.cardTitle, { color: colors.foreground, marginTop: 14 }]}>Pre-printed pad image</Text>
           <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>
             A compressed copy is saved on this device so the layout remains available after restarting the app.
           </Text>
@@ -320,5 +436,14 @@ const styles = StyleSheet.create({
   noImageText: { textAlign: "center", fontSize: 12, fontFamily: "Inter_400Regular" },
   selectedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   visibilityButton: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
+  smallAction: { borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8 },
+  smallActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  templateRow: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1.2, borderRadius: 10, padding: 10 },
+  radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  radioDot: { width: 9, height: 9, borderRadius: 5 },
+  templateName: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  templateMeta: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
+  activeText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  deleteTemplateButton: { borderWidth: 1.2, borderRadius: 10, alignItems: "center", paddingVertical: 9, marginTop: 10 },
   footerHint: { textAlign: "center", fontSize: 11, lineHeight: 17, fontFamily: "Inter_400Regular", paddingHorizontal: 14, paddingBottom: 12 },
 });

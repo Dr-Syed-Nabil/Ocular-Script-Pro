@@ -217,10 +217,12 @@ export default function PrescriptionDetailScreen() {
           qrSvg = await QRCodeLib.toString(patient.puid, { type: "svg", width: 60, margin: 1, color: { dark: "#0D1B2A", light: "#ffffff" } });
         } catch { /* skip QR if fails */ }
       }
+      const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
+        || prescriptionConfig.rxPadOverlay;
       const html = mode === "full"
         ? generateFullPrintHTML(rx, doctor, qrSvg)
-        : prescriptionConfig.rxPadOverlay?.imageUri
-          ? generateRxPadOverlayHTML(rx, prescriptionConfig.rxPadOverlay)
+        : activeRxPadOverlay?.imageUri
+          ? generateRxPadOverlayHTML(rx, activeRxPadOverlay)
           : generateRxPadHTML(rx);
       if (Platform.OS === "web") {
         const win = window.open("", "_blank");
@@ -280,6 +282,8 @@ export default function PrescriptionDetailScreen() {
     id === "patient" || (rx.hiddenSections
       ? !rx.hiddenSections.includes(id)
       : prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false);
+  const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
+    || prescriptionConfig.rxPadOverlay;
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
@@ -308,7 +312,9 @@ export default function PrescriptionDetailScreen() {
               <Feather name="layout" size={22} color={colors.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>Rx Pad Overlay</Text>
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 }}>Data only — no headers or colours. Feed your pre-printed Rx pad and this fills in the blanks.</Text>
+               <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 }}>
+                 {activeRxPadOverlay?.name || "Data-only overlay"} — fills your selected pre-printed Rx pad.
+               </Text>
               </View>
             </View>
           </TouchableOpacity>
