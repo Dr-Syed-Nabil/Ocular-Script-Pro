@@ -767,14 +767,19 @@ function DrugRow({ drug, onChange, onDelete, drugNameOptions, usageCounts }: {
     onChange({ ...drug, formulation: nextFormulation, route: nextFormulation, dosePhases: [first], schedule: first.schedule, scheduleBn: "", duration: phaseDuration(first), durationBn: "" });
   };
 
-  const setConnector = (connector: DrugInstructionConnector) => {
+  const addPhase = (connector: DrugInstructionConnector) => {
     if (!formulation) return;
-    if (phases.length > 1 && phases[1].connector === connector) {
-      savePhases([phases[0]]);
-      return;
-    }
-    const second = phases[1] || defaultDosePhase(formulation, connector);
-    savePhases([phases[0], { ...second, connector }]);
+    savePhases([...phases, defaultDosePhase(formulation, connector)]);
+  };
+
+  const setPhaseConnector = (phaseIndex: number, connector: DrugInstructionConnector) => {
+    if (phaseIndex < 1) return;
+    savePhases(phases.map((phase, index) => index === phaseIndex ? { ...phase, connector } : phase));
+  };
+
+  const removePhase = (phaseIndex: number) => {
+    if (phaseIndex < 1) return;
+    savePhases(phases.filter((_, index) => index !== phaseIndex));
   };
 
   return (
@@ -804,24 +809,44 @@ function DrugRow({ drug, onChange, onDelete, drugNameOptions, usageCounts }: {
             <DrugNameInput value={drug.name} onChange={(name) => onChange({ ...drug, name })} options={drugNameOptions} usageCounts={usageCounts} />
           </View>
           {phases.map((phase, index) => (
-            <DosePhaseEditor
-              key={`${drug.id}-phase-${index}`}
-              formulation={formulation}
-              phase={phase}
-              index={index}
-              onChange={(nextPhase) => savePhases(phases.map((item, itemIndex) => itemIndex === index ? nextPhase : item))}
-            />
+            <View key={`${drug.id}-phase-${index}`}>
+              <DosePhaseEditor
+                formulation={formulation}
+                phase={phase}
+                index={index}
+                onChange={(nextPhase) => savePhases(phases.map((item, itemIndex) => itemIndex === index ? nextPhase : item))}
+              />
+              {index > 0 ? (
+                <View style={{ flexDirection: "row", gap: 6, marginTop: 6, paddingHorizontal: 10 }}>
+                  {(["এবং", "তারপর"] as DrugInstructionConnector[]).map((connector) => (
+                    <TouchableOpacity
+                      key={connector}
+                      style={{ flex: 1, borderWidth: 1, borderColor: phase.connector === connector ? colors.primary : colors.border, backgroundColor: phase.connector === connector ? colors.secondary : colors.card, borderRadius: 8, paddingVertical: 6, alignItems: "center" }}
+                      onPress={() => setPhaseConnector(index, connector)}
+                    >
+                      <Text style={{ color: phase.connector === connector ? colors.primary : colors.mutedForeground, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>{connector}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    style={{ borderWidth: 1, borderColor: colors.destructive, borderRadius: 8, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" }}
+                    onPress={() => removePhase(index)}
+                  >
+                    <Feather name="trash-2" size={13} color={colors.destructive} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
           ))}
           <View style={{ marginTop: 10 }}>
-            <MiniLabel label="Continue treatment with" />
+            <MiniLabel label="Add another treatment stage" />
             <View style={{ flexDirection: "row", gap: 8 }}>
               {(["এবং", "তারপর"] as DrugInstructionConnector[]).map((connector) => (
                 <TouchableOpacity
                   key={connector}
-                  style={{ flex: 1, borderWidth: 1.5, borderColor: phases[1]?.connector === connector ? colors.primary : colors.border, backgroundColor: phases[1]?.connector === connector ? colors.secondary : colors.card, borderRadius: 9, alignItems: "center", paddingVertical: 9 }}
-                  onPress={() => setConnector(connector)}
+                  style={{ flex: 1, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 9, alignItems: "center", paddingVertical: 9 }}
+                  onPress={() => addPhase(connector)}
                 >
-                  <Text style={{ color: phases[1]?.connector === connector ? colors.primary : colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>{connector}</Text>
+                  <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>+ {connector}</Text>
                 </TouchableOpacity>
               ))}
             </View>
