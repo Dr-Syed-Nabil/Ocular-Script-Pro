@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
@@ -249,6 +253,52 @@ test("keeps the selected scan fit behavior in the overlay PDF", () => {
   assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "contain" }), /background-position: center center; background-size: contain;/);
   assert.match(generateRxPadOverlayHTML(rx, { ...baseOverlay, imageFit: "crop" }), /background-position: center center; background-size: cover;/);
   assert.match(generateRxPadOverlayHTML(rx, baseOverlay), /background-position: center center; background-size: 100% 100%;/);
+});
+
+test("renders a mismatched-aspect scan at the configured paper size for every fit choice", { skip: !existsSync("/repl/tools/bin/chromium") }, () => {
+  const paperWidthMm = 123.4;
+  const paperHeightMm = 265.6;
+  const scanPath = join(process.cwd(), "assets/images/nabil-rx-pad-a4.jpg");
+  const imageUri = `data:image/jpeg;base64,${readFileSync(scanPath).toString("base64")}`;
+  const overlay = {
+    id: "wide-scan",
+    name: "Wide scan on tall paper",
+    imageUri,
+    imageWidthPx: 1080,
+    imageHeightPx: 1505,
+    paperWidthMm,
+    paperHeightMm,
+    fields: [{ ...field, x: 11.5, y: 22.25, width: 47.75, height: 8.5 }],
+  };
+  const workDir = mkdtempSync(join(tmpdir(), "rx-pad-fit-"));
+  const expectedWidthPt = paperWidthMm * 72 / 25.4;
+  const expectedHeightPt = paperHeightMm * 72 / 25.4;
+
+  try {
+    for (const fit of ["fit", "contain", "crop"] as const) {
+      const htmlPath = join(workDir, `${fit}.html`);
+      const pdfPath = join(workDir, `${fit}.pdf`);
+      writeFileSync(htmlPath, generateRxPadOverlayHTML(emptyPrescription, { ...overlay, imageFit: fit }));
+      execFileSync("/repl/tools/bin/chromium", [
+        "--headless",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--allow-file-access-from-files",
+        `--print-to-pdf=${pdfPath}`,
+        `file://${htmlPath}`,
+      ], { stdio: "ignore" });
+
+      const pdf = readFileSync(pdfPath);
+      assert.ok(pdf.length > 1_000, `${fit} PDF should not be empty`);
+      assert.match(pdf.toString("latin1"), /\/Subtype\s*\/Image/, `${fit} PDF should embed the scan`);
+      const mediaBox = pdf.toString("latin1").match(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/);
+      assert.ok(mediaBox, `${fit} PDF should declare a physical page size`);
+      assert.ok(Math.abs(Number(mediaBox[1]) - expectedWidthPt) < 1.5, `${fit} PDF width drifted`);
+      assert.ok(Math.abs(Number(mediaBox[2]) - expectedHeightPt) < 1.5, `${fit} PDF height drifted`);
+    }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
 });
 
 test("emits overlay field geometry and page dimensions in the same millimeters", () => {
