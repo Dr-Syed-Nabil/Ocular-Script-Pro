@@ -5,13 +5,6 @@ export interface EyeVA {
   bcva: string;
 }
 
-export interface EyePrescription {
-  sphere: string;
-  cylinder: string;
-  axis: string;
-  addPower: string;
-  va: string;
-}
 export interface EyeSpectacleRx {
   dsp: string;
   dcyl: string;
