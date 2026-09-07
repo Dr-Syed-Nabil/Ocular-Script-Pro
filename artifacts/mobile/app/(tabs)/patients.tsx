@@ -32,8 +32,12 @@ export default function PatientsScreen() {
 
   const filtered = useMemo(() => {
     if (!query.trim()) return patients;
-    const q = query.toLowerCase();
-    return patients.filter((p) => p.name.toLowerCase().includes(q));
+    const q = query.trim().toLowerCase();
+    return patients.filter((p) =>
+      p.name.toLowerCase().includes(q)
+      || p.phone.toLowerCase().includes(q)
+      || (p.puid || "").toLowerCase().includes(q)
+    );
   }, [patients, query]);
 
   const getRxCount = (pid: string) =>
@@ -71,7 +75,7 @@ export default function PatientsScreen() {
         </TouchableOpacity>
       </View>
 
-      <SearchBar value={query} onChangeText={setQuery} placeholder="Search patients..." />
+      <SearchBar value={query} onChangeText={setQuery} placeholder="Search by name, phone, or PUID..." />
 
       <FlatList
         data={filtered}

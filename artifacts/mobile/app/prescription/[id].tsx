@@ -445,22 +445,37 @@ export default function PrescriptionDetailScreen() {
                       <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.primary }}>{drug.route}</Text>
                     </View>
                   </View>
-                  <View style={{ flexDirection: "row", gap: 16 }}>
-                    {drug.schedule ? (
-                      <View>
-                        <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>Schedule</Text>
-                        <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginTop: 1 }}>{drug.schedule}</Text>
-                        {drug.scheduleBn ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 1 }}>{drug.scheduleBn}</Text> : null}
-                      </View>
-                    ) : null}
-                    {drug.duration ? (
-                      <View>
-                        <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>Duration</Text>
-                        <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginTop: 1 }}>{drug.duration}</Text>
-                        {drug.durationBn ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 1 }}>{drug.durationBn}</Text> : null}
-                      </View>
-                    ) : null}
-                  </View>
+                  {drug.dosePhases?.length ? (
+                    <View style={{ gap: 7 }}>
+                      {drug.dosePhases.map((phase, phaseIndex) => (
+                        <View key={`${drug.id}-phase-${phaseIndex}`}>
+                          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, lineHeight: 21 }}>
+                            {phaseIndex && phase.connector ? `${phase.connector}, ` : ""}{phase.schedule}
+                          </Text>
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: colors.accent, marginTop: 1 }}>
+                            {phase.durationValue} {phase.durationUnit}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: "row", gap: 16 }}>
+                      {drug.schedule ? (
+                        <View>
+                          <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>Schedule</Text>
+                          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginTop: 1 }}>{drug.schedule}</Text>
+                          {drug.scheduleBn ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 1 }}>{drug.scheduleBn}</Text> : null}
+                        </View>
+                      ) : null}
+                      {drug.duration ? (
+                        <View>
+                          <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>Duration</Text>
+                          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginTop: 1 }}>{drug.duration}</Text>
+                          {drug.durationBn ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.accent, marginTop: 1 }}>{drug.durationBn}</Text> : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
                   {drug.notes ? <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 6, fontStyle: "italic" }}>{drug.notes}</Text> : null}
                 </InfoCard>
               ))}

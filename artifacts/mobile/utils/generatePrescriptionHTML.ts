@@ -53,14 +53,24 @@ function rxBlock(title: string, re: EyeSpectacleRx, le: EyeSpectacleRx): string 
 function drugsSection(drugs: Drug[]): string {
   const active = drugs.filter((d) => d.name.trim());
   if (!active.length) return "";
-  const rows = active.map((d) => `
+  const rows = active.map((d) => {
+    const schedules = d.dosePhases?.length
+      ? d.dosePhases.map((phase, index) =>
+        `${index && phase.connector ? `<strong>${esc(phase.connector)},</strong> ` : ""}${esc(phase.schedule)}`
+      ).join("<br/>")
+      : `${esc(d.schedule)}${d.scheduleBn ? `<br/><span class="bn">${esc(d.scheduleBn)}</span>` : ""}`;
+    const durations = d.dosePhases?.length
+      ? d.dosePhases.map((phase) => `${esc(phase.durationValue)} ${esc(phase.durationUnit)}`).join("<br/>")
+      : `${esc(d.duration)}${d.durationBn ? `<br/><span class="bn">${esc(d.durationBn)}</span>` : ""}`;
+    return `
     <tr>
       <td class="drug-name">${esc(d.name)}</td>
       <td class="drug-route">${esc(d.route)}</td>
-      <td>${esc(d.schedule)}${d.scheduleBn ? `<br/><span class="bn">${esc(d.scheduleBn)}</span>` : ""}</td>
-      <td>${esc(d.duration)}${d.durationBn ? `<br/><span class="bn">${esc(d.durationBn)}</span>` : ""}</td>
+      <td>${schedules}</td>
+      <td>${durations}</td>
       <td>${esc(d.notes)}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   return `
     <table class="drug-table">
       <thead><tr><th>Drug</th><th>Route</th><th>Schedule</th><th>Duration</th><th>Notes</th></tr></thead>

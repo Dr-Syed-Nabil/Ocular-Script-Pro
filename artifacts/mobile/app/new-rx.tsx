@@ -34,6 +34,9 @@ import {
 } from "@/utils/banglaTranslate";
 import {
   Drug,
+  DrugDosePhase,
+  DrugFormulation,
+  DrugInstructionConnector,
   ChiefComplaintSelection,
   ComplaintLaterality,
   EyeSpectacleRx,
@@ -54,6 +57,42 @@ const EMPTY_HISTORY: PastHistory = {
   ba: false, thyDs: false, uromax: false, others: "",
 };
 const LATERALITIES: ComplaintLaterality[] = ["R", "L", "B"];
+const DRUG_FORMULATIONS: DrugFormulation[] = [
+  "Tablet",
+  "Capsule",
+  "Syrup",
+  "Eye Drop/Gel",
+  "Eye Ointment",
+  "Topical Ointment/Cream",
+];
+const TABLET_SCHEDULES = ["০+০+১", "০+১+০", "১+০+১", "১+১+১+১", "১+০+০", "২+০+০", "৩+০+০", "৪+০+০"];
+const SYRUP_AMOUNTS = ["১", "১.৫", "২", "২.৫", "৩", "৩.৫", "৪", "৫", "৭.৫", "১০", "১২.৫", "১৫"];
+const SYRUP_UNITS = ["চা-চামচ", "ml"];
+const SYRUP_FREQUENCIES = ["২ বার", "৩ বার", "৪ বার", "একবার সকালে", "একবার দুপুরে/বিকেলে/সন্ধ্যায়", "একবার রাতে ঘুমানোর আগে"];
+const DROP_FREQUENCIES = [
+  "৪ ঘণ্টা পরপর", "৫ ঘণ্টা পরপর", "৬ ঘণ্টা পরপর", "৮ ঘণ্টা পরপর", "১২ ঘণ্টা পরপর", "২৪ ঘণ্টা পরপর",
+  "৩ ঘণ্টা পরপর", "২ ঘণ্টা পরপর", "১ ঘণ্টা পরপর", "আধা ঘণ্টা পরপর", "দিনে ২ বার", "দিনে ৩ বার",
+  "দিনে ৪ বার", "দিনে ৫ বার", "দিনে ৬ বার", "দিনে ৮ বার", "দিনে একবার সকালে", "দিনে একবার সন্ধ্যায়",
+  "দিনে একবার রাতে ঘুমানোর আগে",
+];
+const DROP_SITES = ["ডান", "বাম", "উভয়"];
+const OINTMENT_SITES = ["ক্ষতস্থানে", "ডান চোখের ভিতরে", "বাম চোখের ভিতরে", "উভয় চোখের ভিতরে", "ডান চোখের পাতার উপর", "বাম চোখের পাতার উপর", "উভয় চোখের পাতার উপর"];
+const OINTMENT_FREQUENCIES = ["রাতে ঘুমানোর আগে", "দিনে ৪ বার", "দিনে ৩ বার", "দিনে ২ বার", "দিনে ১ বার"];
+const DURATION_VALUES = ["১", "২", "৩", "৫", "৭", "১৫", "৩০"];
+const DURATION_UNITS: DrugDosePhase["durationUnit"][] = ["দিন", "সপ্তাহ", "মাস"];
+
+type AgeUnit = "years" | "months";
+
+function parseAge(value: string): { number: string; unit: AgeUnit } {
+  return {
+    number: value.match(/\d+/)?.[0] || "",
+    unit: /month|\bmo\b/i.test(value) ? "months" : "years",
+  };
+}
+
+function formatAge(number: string, unit: AgeUnit): string {
+  return number.trim() ? `${number.trim()} ${unit}` : "";
+}
 
 function formatChiefComplaints(selections: ChiefComplaintSelection[], freeText: string): string {
   const selected = selections.map(({ complaint, laterality }) =>
@@ -67,7 +106,7 @@ function genDrugId() {
   return Math.random().toString(36).slice(2);
 }
 function emptyDrug(): Drug {
-  return { id: genDrugId(), name: "", schedule: "", scheduleBn: "", duration: "", durationBn: "", route: "Eye Drops", notes: "" };
+  return { id: genDrugId(), name: "", schedule: "", scheduleBn: "", duration: "", durationBn: "", route: "", notes: "" };
 }
 
 /* ───────── tiny helpers ───────── */
@@ -496,27 +535,246 @@ function SpectacleTable({ reD, leD, reN, leN, ipd, nearIPD, addValue, onChangeRx
 
 /* ───────── Drug Row ───────── */
 
-function DrugRow({ drug, onChange, onDelete, drugSuggestions, routes }: {
+function defaultDosePhase(formulation: DrugFormulation, connector?: DrugInstructionConnector): DrugDosePhase {
+  const common = { durationValue: "৭", durationUnit: "দিন" as const, connector };
+  if (formulation === "Syrup") {
+    return { ...common, amount: "১", unit: "চা-চামচ", frequency: "২ বার", schedule: "১ চা-চামচ দিনে ২ বার" };
+  }
+  if (formulation === "Eye Drop/Gel") {
+    return { ...common, frequency: "৪ ঘণ্টা পরপর", site: "বাম", schedule: "১ ফোঁটা করে ৪ ঘণ্টা পরপর বাম চোখে" };
+  }
+  if (formulation === "Eye Ointment" || formulation === "Topical Ointment/Cream") {
+    return { ...common, frequency: "দিনে ৩ বার", site: "ক্ষতস্থানে", schedule: "ক্ষতস্থানে লাগাবেন দিনে ৩ বার" };
+  }
+  return { ...common, schedule: "০+০+১" };
+}
+
+function phaseDuration(phase: DrugDosePhase): string {
+  return `${phase.durationValue} ${phase.durationUnit}`;
+}
+
+function phaseSchedule(formulation: DrugFormulation, phase: DrugDosePhase): string {
+  if (formulation === "Syrup") return `${phase.amount || "১"} ${phase.unit || "চা-চামচ"} দিনে ${phase.frequency || "২ বার"}`;
+  if (formulation === "Eye Drop/Gel") return `১ ফোঁটা করে ${phase.frequency || "৪ ঘণ্টা পরপর"} ${phase.site || "বাম"} চোখে`;
+  if (formulation === "Eye Ointment" || formulation === "Topical Ointment/Cream") {
+    return `${phase.site || "ক্ষতস্থানে"} লাগাবেন ${phase.frequency || "দিনে ৩ বার"}`;
+  }
+  return phase.schedule;
+}
+
+function inferFormulation(drug: Drug): DrugFormulation | undefined {
+  if (drug.formulation) return drug.formulation;
+  if (/eye drop|gel/i.test(drug.route)) return "Eye Drop/Gel";
+  if (/eye ointment/i.test(drug.route)) return "Eye Ointment";
+  if (/topical/i.test(drug.route)) return "Topical Ointment/Cream";
+  if (/oral/i.test(drug.route)) return "Tablet";
+  return undefined;
+}
+
+function legacyDosePhase(drug: Drug, formulation: DrugFormulation): DrugDosePhase {
+  const phase = defaultDosePhase(formulation);
+  const duration = tobnDigits(drug.durationBn || drug.duration)
+    .replace(/\bdays?\b/i, "দিন")
+    .replace(/\bweeks?\b/i, "সপ্তাহ")
+    .replace(/\bmonths?\b/i, "মাস")
+    .trim();
+  const durationMatch = duration.match(/^(.+?)\s*(দিন|সপ্তাহ|মাস)$/);
+  return {
+    ...phase,
+    schedule: drug.scheduleBn || tobnDigits(drug.schedule) || phase.schedule,
+    durationValue: durationMatch?.[1]?.trim() || phase.durationValue,
+    durationUnit: (durationMatch?.[2] as DrugDosePhase["durationUnit"]) || phase.durationUnit,
+  };
+}
+
+function InlineChoice({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const colors = useColors();
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ gap: 5 }}>
+      <TouchableOpacity
+        style={{ borderWidth: 1.5, borderColor: open ? colors.primary : colors.border, borderRadius: 8, backgroundColor: colors.surface, paddingHorizontal: 10, paddingVertical: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+        onPress={() => setOpen((current) => !current)}
+      >
+        <Text style={{ flex: 1, color: value ? colors.foreground : colors.mutedForeground, fontSize: 13, fontFamily: "Inter_500Medium" }}>{value || placeholder}</Text>
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={14} color={colors.mutedForeground} />
+      </TouchableOpacity>
+      {open ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={{ borderWidth: 1, borderColor: value === option ? colors.primary : colors.border, backgroundColor: value === option ? colors.secondary : colors.card, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 6 }}
+              onPress={() => { onChange(option); setOpen(false); }}
+            >
+              <Text style={{ color: value === option ? colors.primary : colors.foreground, fontSize: 12, fontFamily: "Inter_500Medium" }}>{option}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function DrugNameInput({
+  value,
+  onChange,
+  options,
+  usageCounts,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  usageCounts: Record<string, number>;
+}) {
+  const colors = useColors();
+  const [focused, setFocused] = useState(false);
+  const matches = value.trim()
+    ? options
+      .filter((option) => option.toLowerCase().startsWith(value.trim().toLowerCase()) && option.toLowerCase() !== value.trim().toLowerCase())
+      .sort((a, b) => (usageCounts[b.toLowerCase()] || 0) - (usageCounts[a.toLowerCase()] || 0) || a.localeCompare(b))
+      .slice(0, 5)
+    : [];
+  return (
+    <View>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        placeholder="Start typing drug name…"
+        placeholderTextColor={colors.mutedForeground}
+        style={{ borderWidth: 1.5, borderColor: focused ? colors.primary : colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, color: colors.foreground, backgroundColor: colors.surface, fontSize: 14, fontFamily: "Inter_400Regular" }}
+      />
+      {focused && matches.length ? (
+        <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 9, backgroundColor: colors.card, overflow: "hidden", marginTop: 3 }}>
+          {matches.map((option) => (
+            <TouchableOpacity key={option} style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }} onPress={() => { onChange(option); setFocused(false); }}>
+              <Text style={{ color: colors.foreground, fontSize: 13, fontFamily: "Inter_500Medium" }}>{option}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function DosePhaseEditor({
+  formulation,
+  phase,
+  index,
+  onChange,
+}: {
+  formulation: DrugFormulation;
+  phase: DrugDosePhase;
+  index: number;
+  onChange: (phase: DrugDosePhase) => void;
+}) {
+  const colors = useColors();
+  const update = (patch: Partial<DrugDosePhase>) => {
+    const next = { ...phase, ...patch };
+    onChange({ ...next, schedule: phaseSchedule(formulation, next) });
+  };
+  return (
+    <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, marginTop: 10, gap: 8, backgroundColor: colors.surface }}>
+      <MiniLabel label={index === 0 ? "Dose schedule" : `${phase.connector || "পরবর্তী"} dose schedule`} />
+      {formulation === "Tablet" || formulation === "Capsule" ? (
+        <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {TABLET_SCHEDULES.map((schedule) => (
+              <TouchableOpacity key={schedule} style={{ borderWidth: 1, borderColor: phase.schedule === schedule ? colors.primary : colors.border, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: phase.schedule === schedule ? colors.secondary : colors.card }} onPress={() => update({ schedule })}>
+                <Text style={{ color: phase.schedule === schedule ? colors.primary : colors.foreground, fontFamily: "Inter_500Medium", fontSize: 13 }}>{schedule}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextInput
+            value={phase.schedule}
+            onChangeText={(value) => update({ schedule: tobnDigits(value) })}
+            placeholder="নিজস্ব ডোজ লিখুন, যেমন 2+0+1"
+            placeholderTextColor={colors.mutedForeground}
+            style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, color: colors.foreground, backgroundColor: colors.card, fontSize: 13 }}
+          />
+        </>
+      ) : formulation === "Syrup" ? (
+        <View style={{ gap: 7 }}>
+          <InlineChoice value={phase.amount || "১"} options={SYRUP_AMOUNTS} onChange={(amount) => update({ amount })} placeholder="পরিমাণ" />
+          <InlineChoice value={phase.unit || "চা-চামচ"} options={SYRUP_UNITS} onChange={(unit) => update({ unit })} placeholder="একক" />
+          <InlineChoice value={phase.frequency || "২ বার"} options={SYRUP_FREQUENCIES} onChange={(frequency) => update({ frequency })} placeholder="কতবার" />
+        </View>
+      ) : formulation === "Eye Drop/Gel" ? (
+        <View style={{ gap: 7 }}>
+          <InlineChoice value={phase.frequency || "৪ ঘণ্টা পরপর"} options={DROP_FREQUENCIES} onChange={(frequency) => update({ frequency })} placeholder="ব্যবহারের সময়" />
+          <InlineChoice value={phase.site || "বাম"} options={DROP_SITES} onChange={(site) => update({ site })} placeholder="চোখ" />
+        </View>
+      ) : (
+        <View style={{ gap: 7 }}>
+          <InlineChoice value={phase.site || "ক্ষতস্থানে"} options={OINTMENT_SITES} onChange={(site) => update({ site })} placeholder="প্রয়োগের স্থান" />
+          <InlineChoice value={phase.frequency || "দিনে ৩ বার"} options={OINTMENT_FREQUENCIES} onChange={(frequency) => update({ frequency })} placeholder="কতবার" />
+        </View>
+      )}
+      <View style={{ paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, backgroundColor: colors.secondary }}>
+        <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "Inter_600SemiBold" }}>{phaseSchedule(formulation, phase)}</Text>
+      </View>
+      <MiniLabel label="Duration" />
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}><InlineChoice value={phase.durationValue} options={DURATION_VALUES} onChange={(durationValue) => update({ durationValue })} placeholder="সংখ্যা" /></View>
+        <View style={{ flex: 1 }}><InlineChoice value={phase.durationUnit} options={DURATION_UNITS} onChange={(durationUnit) => update({ durationUnit: durationUnit as DrugDosePhase["durationUnit"] })} placeholder="একক" /></View>
+      </View>
+      <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: "Inter_500Medium" }}>{phaseSchedule(formulation, phase)} — {phaseDuration(phase)}</Text>
+    </View>
+  );
+}
+
+function DrugRow({ drug, onChange, onDelete, drugNameOptions, usageCounts }: {
   drug: Drug;
   onChange: (updated: Drug) => void;
   onDelete: () => void;
-  drugSuggestions: ReturnType<typeof useSuggestions>;
-  routes: string[];
+  drugNameOptions: string[];
+  usageCounts: Record<string, number>;
 }) {
   const colors = useColors();
-  const scheduleSugg = useSuggestions("drug_schedule");
-  const durationSugg = useSuggestions("drug_duration");
+  const formulation = inferFormulation(drug);
+  const phases = drug.dosePhases?.length
+    ? drug.dosePhases
+    : formulation
+      ? [legacyDosePhase(drug, formulation)]
+      : [];
 
-  const upd = (field: keyof Drug) => (val: string) => onChange({ ...drug, [field]: val });
-
-  const translateSchedule = () => {
-    const bn = tobnDigits(drug.schedule);
-    onChange({ ...drug, scheduleBn: bn });
+  const savePhases = (next: DrugDosePhase[]) => {
+    const first = next[0];
+    onChange({
+      ...drug,
+      dosePhases: next,
+      schedule: first?.schedule || "",
+      scheduleBn: "",
+      duration: first ? phaseDuration(first) : "",
+      durationBn: "",
+    });
   };
 
-  const translateDuration = () => {
-    const bn = translateToBangla(drug.duration);
-    onChange({ ...drug, durationBn: bn });
+  const selectFormulation = (nextFormulation: DrugFormulation) => {
+    const first = defaultDosePhase(nextFormulation);
+    onChange({ ...drug, formulation: nextFormulation, route: nextFormulation, dosePhases: [first], schedule: first.schedule, scheduleBn: "", duration: phaseDuration(first), durationBn: "" });
+  };
+
+  const setConnector = (connector: DrugInstructionConnector) => {
+    if (!formulation) return;
+    if (phases.length > 1 && phases[1].connector === connector) {
+      savePhases([phases[0]]);
+      return;
+    }
+    const second = phases[1] || defaultDosePhase(formulation, connector);
+    savePhases([phases[0], { ...second, connector }]);
   };
 
   return (
@@ -528,76 +786,53 @@ function DrugRow({ drug, onChange, onDelete, drugSuggestions, routes }: {
         </TouchableOpacity>
       </View>
 
-      <SmartInput
-        fieldKey="drug_name"
-        value={drug.name}
-        onChangeText={upd("name")}
-        placeholder="Drug name (e.g. Moxifloxacin)"
-        style={{ fontSize: 14 }}
-      />
-
+      <MiniLabel label="1. Choose formulation" />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-        {routes.map((r) => (
-          <TouchableOpacity key={r}
-            style={{ borderWidth: 1.5, borderColor: drug.route === r ? colors.primary : colors.border, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: drug.route === r ? colors.secondary : colors.card }}
-            onPress={() => onChange({ ...drug, route: r })}
+        {DRUG_FORMULATIONS.map((item) => (
+          <TouchableOpacity key={item}
+            style={{ borderWidth: 1.5, borderColor: formulation === item ? colors.primary : colors.border, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: formulation === item ? colors.secondary : colors.card }}
+            onPress={() => selectFormulation(item)}
           >
-            <Text style={{ fontSize: 12, fontFamily: drug.route === r ? "Inter_600SemiBold" : "Inter_500Medium", color: drug.route === r ? colors.primary : colors.mutedForeground }}>{r}</Text>
+            <Text style={{ fontSize: 12, fontFamily: formulation === item ? "Inter_600SemiBold" : "Inter_500Medium", color: formulation === item ? colors.primary : colors.mutedForeground }}>{item}</Text>
           </TouchableOpacity>
         ))}
       </View>
-
-      <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
-        <View style={{ flex: 1 }}>
-          <MiniLabel label="Schedule" />
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            <View style={{ flex: 1 }}>
-              <SmartInput fieldKey="drug_schedule" value={drug.schedule} onChangeText={upd("schedule")} placeholder="e.g. 1+0+1 BD" />
-            </View>
-            <TouchableOpacity
-              style={{ backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, alignItems: "center", justifyContent: "center" }}
-              onPress={translateSchedule}
-            >
-              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>বাংলা</Text>
-            </TouchableOpacity>
+      {formulation ? (
+        <>
+          <View style={{ marginTop: 10 }}>
+            <MiniLabel label="2. Drug name" />
+            <DrugNameInput value={drug.name} onChange={(name) => onChange({ ...drug, name })} options={drugNameOptions} usageCounts={usageCounts} />
           </View>
-          {drug.scheduleBn ? (
-            <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: colors.accent }}>{drug.scheduleBn}</Text>
-              <TouchableOpacity onPress={() => onChange({ ...drug, scheduleBn: "" })}>
-                <Feather name="x" size={12} color={colors.mutedForeground} />
-              </TouchableOpacity>
+          {phases.map((phase, index) => (
+            <DosePhaseEditor
+              key={`${drug.id}-phase-${index}`}
+              formulation={formulation}
+              phase={phase}
+              index={index}
+              onChange={(nextPhase) => savePhases(phases.map((item, itemIndex) => itemIndex === index ? nextPhase : item))}
+            />
+          ))}
+          <View style={{ marginTop: 10 }}>
+            <MiniLabel label="Continue treatment with" />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(["এবং", "তারপর"] as DrugInstructionConnector[]).map((connector) => (
+                <TouchableOpacity
+                  key={connector}
+                  style={{ flex: 1, borderWidth: 1.5, borderColor: phases[1]?.connector === connector ? colors.primary : colors.border, backgroundColor: phases[1]?.connector === connector ? colors.secondary : colors.card, borderRadius: 9, alignItems: "center", paddingVertical: 9 }}
+                  onPress={() => setConnector(connector)}
+                >
+                  <Text style={{ color: phases[1]?.connector === connector ? colors.primary : colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 13 }}>{connector}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          ) : null}
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <MiniLabel label="Duration" />
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            <View style={{ flex: 1 }}>
-              <SmartInput fieldKey="drug_duration" value={drug.duration} onChangeText={upd("duration")} placeholder="e.g. 7 days" />
-            </View>
-            <TouchableOpacity
-              style={{ backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, alignItems: "center", justifyContent: "center" }}
-              onPress={translateDuration}
-            >
-              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>বাংলা</Text>
-            </TouchableOpacity>
           </View>
-          {drug.durationBn ? (
-            <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: colors.accent }}>{drug.durationBn}</Text>
-              <TouchableOpacity onPress={() => onChange({ ...drug, durationBn: "" })}>
-                <Feather name="x" size={12} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={{ marginTop: 8 }}>
+        </>
+      ) : (
+        <Text style={{ marginTop: 9, color: colors.mutedForeground, fontSize: 12, fontFamily: "Inter_400Regular" }}>Choose a formulation before entering the drug and dosage.</Text>
+      )}
+      <View style={{ marginTop: 10 }}>
         <MiniLabel label="Notes (optional)" />
-        <SmartInput fieldKey="drug_notes" value={drug.notes} onChangeText={upd("notes")} placeholder="Special instructions…" />
+        <SmartInput fieldKey="drug_notes" value={drug.notes} onChangeText={(notes) => onChange({ ...drug, notes })} placeholder="Special instructions…" />
       </View>
     </View>
   );
@@ -629,6 +864,7 @@ export default function NewRxScreen() {
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
   const [patientAge, setPatientAge] = useState("");
+  const [patientAgeUnit, setPatientAgeUnit] = useState<AgeUnit>("years");
   const [patientWeight, setPatientWeight] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientPuid, setPatientPuid] = useState("");
@@ -714,9 +950,32 @@ export default function NewRxScreen() {
 
   const filteredPatients = useMemo(() => {
     if (!patientQuery.trim()) return patients.slice(0, 8);
-    const q = patientQuery.toLowerCase();
-    return patients.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
+    const q = patientQuery.trim().toLowerCase();
+    return patients.filter((p) =>
+      p.name.toLowerCase().includes(q)
+      || p.phone.toLowerCase().includes(q)
+      || (p.puid || "").toLowerCase().includes(q)
+    ).slice(0, 8);
   }, [patients, patientQuery]);
+
+  const drugUsageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    prescriptions.forEach((prescription) => prescription.drugs.forEach((drug) => {
+      const key = drug.name.trim().toLowerCase();
+      if (key) counts[key] = (counts[key] || 0) + 1;
+    }));
+    return counts;
+  }, [prescriptions]);
+
+  const drugNameOptions = useMemo(() => {
+    const names = [
+      ...prescriptions.flatMap((prescription) => prescription.drugs.map((drug) => drug.name)),
+      ...drugNameSugg.all,
+      "Optimox",
+      "Optafenac TS",
+    ].map((name) => name.trim()).filter(Boolean);
+    return names.filter((name, index) => names.findIndex((item) => item.toLowerCase() === name.toLowerCase()) === index);
+  }, [drugNameSugg.all, prescriptions]);
 
   // ── Duplicate Rx pre-fill ──
   useEffect(() => {
@@ -731,7 +990,9 @@ export default function NewRxScreen() {
       setPatientPhone(source.patientPhone ?? patient.phone);
       setPatientPuid(source.patientPuid ?? patient.puid ?? "");
     }
-    setPatientAge(source.patientAge);
+    const sourceAge = parseAge(source.patientAge);
+    setPatientAge(sourceAge.number);
+    setPatientAgeUnit(sourceAge.unit);
     setPatientWeight(source.patientWeight || "");
     setPrescriptionDate(editId ? source.date : new Date().toISOString().split("T")[0]);
     const sourceVaMode = (source.rightEyeVA.wa || source.leftEyeVA.wa) && !(source.rightEyeVA.ua || source.leftEyeVA.ua) ? "wa" : "ua";
@@ -807,7 +1068,9 @@ export default function NewRxScreen() {
       setPatientQuery(found.name);
       setPatientPhone(found.phone);
       setPatientPuid(found.puid || "");
-      setPatientAge(found.ageAtEnrollment || "");
+      const foundAge = parseAge(found.ageAtEnrollment || "");
+      setPatientAge(foundAge.number);
+      setPatientAgeUnit(foundAge.unit);
       setShowDropdown(false);
       setShowScanner(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -859,8 +1122,9 @@ export default function NewRxScreen() {
     setSaving(true);
     try {
       let patient = selectedPatient;
+      const formattedPatientAge = formatAge(patientAge, patientAgeUnit);
       if (isNewPatient) {
-        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: patientPhone.trim(), email: "", gender: "", ageAtEnrollment: patientAge.trim() });
+        patient = await addPatient({ name: newPatientName.trim(), dob: "", phone: patientPhone.trim(), email: "", gender: "", ageAtEnrollment: formattedPatientAge });
       }
       if (!patient) return;
 
@@ -979,7 +1243,7 @@ export default function NewRxScreen() {
         }))
         .filter((section) => section.content);
       const prescriptionData = {
-        patientId: patient.id, patientName: patient.name, patientAge,
+        patientId: patient.id, patientName: patient.name, patientAge: formattedPatientAge,
         patientWeight: patientWeight.trim(),
         patientPhone: patientPhone.trim() || patient.phone,
         patientPuid: patient.puid || patientPuid,
@@ -1176,12 +1440,14 @@ export default function NewRxScreen() {
                 onChangeText={(t) => {
                   setPatientQuery(t);
                   setSelectedPatient(null);
+                  setPatientAge("");
+                  setPatientAgeUnit("years");
                   setPatientPhone("");
                   setPatientPuid("");
                   setShowDropdown(true);
                 }}
                 onFocus={() => setShowDropdown(true)}
-                placeholder="Search patient by name…" placeholderTextColor={colors.mutedForeground}
+                placeholder="Search by name, phone, or PUID…" placeholderTextColor={colors.mutedForeground}
               />
               {selectedPatient
                 ? <Feather name="check-circle" size={16} color={colors.success} />
@@ -1202,13 +1468,15 @@ export default function NewRxScreen() {
                     onPress={() => {
                       setSelectedPatient(p);
                       setPatientQuery(p.name);
-                      setPatientAge(p.ageAtEnrollment || "");
+                      const selectedAge = parseAge(p.ageAtEnrollment || "");
+                      setPatientAge(selectedAge.number);
+                      setPatientAgeUnit(selectedAge.unit);
                       setPatientPhone(p.phone);
                       setPatientPuid(p.puid || "");
                       setShowDropdown(false);
                     }}>
                     <Text style={s.dropdownName}>{p.name}</Text>
-                    {p.phone ? <Text style={s.dropdownSub}>{p.phone}</Text> : null}
+                    <Text style={s.dropdownSub}>{[p.phone, p.puid].filter(Boolean).join("  ·  ")}</Text>
                   </TouchableOpacity>
                 ))}
                 {filteredPatients.length === 0 && <View style={s.dropdownItem}><Text style={s.dropdownSub}>No patients found</Text></View>}
@@ -1219,6 +1487,7 @@ export default function NewRxScreen() {
               setSelectedPatient(null);
               setPatientQuery("");
               setPatientAge("");
+              setPatientAgeUnit("years");
               setPatientPhone("");
               setPatientPuid("");
               setShowDropdown(false);
@@ -1237,7 +1506,25 @@ export default function NewRxScreen() {
         <View style={s.row}>
           <View style={{ flex: 1 }}>
             <MiniLabel label="Age of the patient" />
-            <TextInput style={s.input} value={patientAge} onChangeText={setPatientAge} placeholder="e.g. 45 yrs" placeholderTextColor={colors.mutedForeground} />
+            <TextInput
+              style={s.input}
+              value={patientAge}
+              onChangeText={(value) => setPatientAge(value.replace(/[^0-9]/g, ""))}
+              placeholder="e.g. 45"
+              keyboardType="number-pad"
+              placeholderTextColor={colors.mutedForeground}
+            />
+            <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
+              {(["years", "months"] as AgeUnit[]).map((unit) => (
+                <TouchableOpacity
+                  key={unit}
+                  style={{ flex: 1, borderWidth: 1.5, borderColor: patientAgeUnit === unit ? colors.primary : colors.border, backgroundColor: patientAgeUnit === unit ? colors.secondary : colors.card, borderRadius: 8, paddingVertical: 7, alignItems: "center" }}
+                  onPress={() => setPatientAgeUnit(unit)}
+                >
+                  <Text style={{ color: patientAgeUnit === unit ? colors.primary : colors.mutedForeground, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>{unit === "years" ? "Years" : "Months"}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
           <View style={{ width: 12 }} />
           <View style={{ flex: 1 }}>
@@ -1402,7 +1689,14 @@ export default function NewRxScreen() {
         {sectionEnabled("drugs") ? <>
         <SectionTitle title={sectionTitle("drugs", "Treatment (Rx)")} />
         {drugs.map((drug) => (
-          <DrugRow key={drug.id} drug={drug} onChange={(u) => updateDrug(drug.id, u)} onDelete={() => removeDrug(drug.id)} drugSuggestions={drugNameSugg} routes={prescriptionConfig.drugRoutes} />
+          <DrugRow
+            key={drug.id}
+            drug={drug}
+            onChange={(u) => updateDrug(drug.id, u)}
+            onDelete={() => removeDrug(drug.id)}
+            drugNameOptions={drugNameOptions}
+            usageCounts={drugUsageCounts}
+          />
         ))}
         <TouchableOpacity style={s.addDrugBtn} onPress={addDrug}>
           <Feather name="plus" size={16} color={colors.primary} style={{ marginRight: 6 }} />

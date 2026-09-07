@@ -23,6 +23,27 @@ export interface PastHistory {
   others: string;
 }
 
+export type DrugFormulation =
+  | "Tablet"
+  | "Capsule"
+  | "Syrup"
+  | "Eye Drop/Gel"
+  | "Eye Ointment"
+  | "Topical Ointment/Cream";
+
+export type DrugInstructionConnector = "এবং" | "তারপর";
+
+export interface DrugDosePhase {
+  schedule: string;
+  durationValue: string;
+  durationUnit: "দিন" | "সপ্তাহ" | "মাস";
+  amount?: string;
+  unit?: string;
+  frequency?: string;
+  site?: string;
+  connector?: DrugInstructionConnector;
+}
+
 export interface Drug {
   id: string;
   name: string;
@@ -32,6 +53,8 @@ export interface Drug {
   durationBn: string;
   route: string;
   notes: string;
+  formulation?: DrugFormulation;
+  dosePhases?: DrugDosePhase[];
 }
 
 export type ComplaintLaterality = "R" | "L" | "B";

@@ -19,7 +19,7 @@ function generateId(): string {
 }
 
 /**
- * Build a structured PUID:  {INITIALS}{AGE2d}Y{DDMMYY}{SERIAL3d}
+ * Build a structured PUID:  {INITIALS}{AGE2d}{Y|M}{DDMMYY}{SERIAL3d}
  * e.g. Rashedul Islam, 41 yrs, 1 Aug 2026, 7th patient of the day → RI41Y070826007
  */
 function buildPuid(name: string, ageStr: string, enrollDate: Date, serial: number): string {
@@ -33,11 +33,12 @@ function buildPuid(name: string, ageStr: string, enrollDate: Date, serial: numbe
   // Extract numeric age (handles "41", "41 yrs", "41Y", etc.)
   const ageNum = parseInt(ageStr.replace(/[^0-9]/g, ""), 10) || 0;
   const age2 = String(ageNum).padStart(2, "0").slice(-2);
+  const ageUnit = /month|\bmo\b/i.test(ageStr) ? "M" : "Y";
   const dd = String(enrollDate.getDate()).padStart(2, "0");
   const mm = String(enrollDate.getMonth() + 1).padStart(2, "0");
   const yy = String(enrollDate.getFullYear()).slice(-2);
   const ser3 = String(serial).padStart(3, "0").slice(-3);
-  return `${initials}${age2}Y${dd}${mm}${yy}${ser3}`;
+  return `${initials}${age2}${ageUnit}${dd}${mm}${yy}${ser3}`;
 }
 
 // Legacy random PUID for migration of pre-existing patients

@@ -27,6 +27,8 @@ export default function PrescriptionsScreen() {
     const q = query.toLowerCase();
     return prescriptions.filter((r) =>
       r.patientName.toLowerCase().includes(q)
+      || (r.patientPhone || "").toLowerCase().includes(q)
+      || (r.patientPuid || "").toLowerCase().includes(q)
     );
   }, [prescriptions, query]);
 
@@ -48,7 +50,7 @@ export default function PrescriptionsScreen() {
         </TouchableOpacity>
       </View>
 
-      <SearchBar value={query} onChangeText={setQuery} placeholder="Search by patient name" />
+      <SearchBar value={query} onChangeText={setQuery} placeholder="Search by name, phone, or PUID" />
 
       <FlatList
         data={filtered}
