@@ -927,9 +927,10 @@ function DrugRow({ drug, onChange, onDelete, drugNameOptions, usageCounts }: {
 export default function NewRxScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { patients, prescriptions, addPrescription, updatePrescription, addPatient, getPatientByPuid, prescriptionConfig, updatePrescriptionConfig } = useData();
+  const { patients, prescriptions, addPrescription, updatePrescription, addPatient, getPatientByPuid, prescriptionConfig, updatePrescriptionConfig, loading: dataLoading } = useData();
   const s = styles(colors);
-  const { duplicateFrom, editId } = useLocalSearchParams<{ duplicateFrom?: string; editId?: string }>();
+  const { duplicateFrom, editId, patientId } = useLocalSearchParams<{ duplicateFrom?: string; editId?: string; patientId?: string }>();
+  const hydratedSourceRef = useRef("");
 
   const [cameraPermission, requestPermission] = useCameraPermissions();
   const [showScanner, setShowScanner] = useState(false);
@@ -1063,10 +1064,27 @@ export default function NewRxScreen() {
 
   // ── Duplicate Rx pre-fill ──
   useEffect(() => {
+    if (dataLoading) return;
     const sourceId = editId || duplicateFrom;
-    if (!sourceId) return;
+    const hydrationKey = sourceId ? `${sourceId}:${editId ? "edit" : "duplicate"}` : patientId ? `patient:${patientId}` : "";
+    if (!hydrationKey || hydratedSourceRef.current === hydrationKey) return;
     const source = prescriptions.find((r) => r.id === sourceId);
+    if (!sourceId && patientId) {
+      const patient = patients.find((item) => item.id === patientId);
+      if (patient) {
+        hydratedSourceRef.current = hydrationKey;
+        setSelectedPatient(patient);
+        setPatientQuery(patient.name);
+        setPatientPhone(patient.phone);
+        setPatientPuid(patient.puid || "");
+        const patientAgeValue = parseAge(patient.ageAtEnrollment || "");
+        setPatientAge(patientAgeValue.number);
+        setPatientAgeUnit(patientAgeValue.unit);
+      }
+      return;
+    }
     if (!source) return;
+    hydratedSourceRef.current = hydrationKey;
     const patient = patients.find((p) => p.id === source.patientId);
     if (patient) {
       setSelectedPatient(patient);
@@ -1107,8 +1125,7 @@ export default function NewRxScreen() {
     setAdvice(source.sectionFields?.advice?.freeText ?? source.advice); setAdviceBn(source.adviceBn);
     setFollowUp(source.followUp); setFollowUpBn(source.followUpBn);
     setCustomSections(source.customSections || []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dataLoading, duplicateFrom, editId, patientId, patients, prescriptions]);
 
   const sectionTitle = (id: string, fallback: string) =>
     prescriptionConfig.sections.find((section) => section.id === id)?.title || fallback;
@@ -1205,6 +1222,14 @@ export default function NewRxScreen() {
       );
       return;
     }
+    const investigationsField = getSectionField("investigations", investigations);
+    const incompleteInvestigation = investigationsField.selectedOptions.find(
+      (option) => OPHTHALMIC_INVESTIGATIONS.has(option) && !investigationsField.optionLateralities?.[option],
+    );
+    if (incompleteInvestigation) {
+      Alert.alert("Select an eye side", `Choose R, L, or B for ${incompleteInvestigation}.`);
+      return;
+    }
     setSaving(true);
     try {
       let patient = selectedPatient;
@@ -1220,15 +1245,7 @@ export default function NewRxScreen() {
       const anteriorField = getSectionField("examination:anteriorSegment", anteriorSegment);
       const posteriorField = getSectionField("examination:posteriorSegment", posteriorSegment);
       const diagnosisField = getSectionField("diagnosis", diagnosis);
-      const investigationsField = getSectionField("investigations", investigations);
       const adviceField = getSectionField("advice", advice);
-      const incompleteInvestigation = investigationsField.selectedOptions.find(
-        (option) => OPHTHALMIC_INVESTIGATIONS.has(option) && !investigationsField.optionLateralities?.[option],
-      );
-      if (incompleteInvestigation) {
-        Alert.alert("Select an eye side", `Choose R, L, or B for ${incompleteInvestigation}.`);
-        return;
-      }
       if (adnexaField.freeText.trim()) adnexaSugg.add(adnexaField.freeText);
       if (anteriorField.freeText.trim()) anteriorSugg.add(anteriorField.freeText);
       if (posteriorField.freeText.trim()) posteriorSugg.add(posteriorField.freeText);

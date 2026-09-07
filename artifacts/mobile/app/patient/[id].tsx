@@ -29,11 +29,15 @@ export default function PatientDetailScreen() {
   const patient = patients.find((p) => p.id === id);
   const prescriptions = getPrescriptionsForPatient(id ?? "");
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)/patients");
+  };
 
   if (!patient) {
     return (
       <View style={[s.container, { paddingTop: topPad }]}>
-        <TouchableOpacity style={s.navIconBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={s.navIconBtn} onPress={goBack}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <View style={s.notFound}>
@@ -55,7 +59,7 @@ export default function PatientDetailScreen() {
           onPress: async () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             await deletePatient(patient.id);
-            router.back();
+            goBack();
           },
         },
       ]
@@ -73,7 +77,7 @@ export default function PatientDetailScreen() {
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
       <View style={s.navBar}>
-        <TouchableOpacity style={s.navIconBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.navIconBtn} onPress={goBack}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={s.navTitle}>Patient</Text>
@@ -125,7 +129,7 @@ export default function PatientDetailScreen() {
 
               <TouchableOpacity
                 style={s.newRxBtn}
-                onPress={() => router.push("/new-rx")}
+                onPress={() => router.push(`/new-rx?patientId=${encodeURIComponent(patient.id)}`)}
                 activeOpacity={0.8}
               >
                 <Feather name="plus" size={16} color="#fff" style={{ marginRight: 6 }} />

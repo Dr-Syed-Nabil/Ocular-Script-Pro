@@ -40,7 +40,7 @@ function vaTable(reVA: EyeVA, leVA: EyeVA): string {
 
 /* ── spectacle table ── */
 function rxBlock(title: string, re: EyeSpectacleRx, le: EyeSpectacleRx): string {
-  const hasDist = re.dsp || re.dcyl || re.va || le.dsp || le.dcyl || le.va;
+  const hasDist = re.dsp || re.dcyl || re.axis || re.va || le.dsp || le.dcyl || le.axis || le.va;
   if (!hasDist) return "";
   return `
     <tr class="rx-subtitle"><td colspan="5">${esc(title)}</td></tr>
@@ -330,7 +330,7 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- Examination -->
-  ${(showSection(rx, "examination") || showSection(rx, "gat")) && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment || rx.gatRight || rx.gatLeft) ? `
+  ${showSection(rx, "examination") && (rx.adnexa || rx.anteriorSegment || rx.posteriorSegment) ? `
   <div class="section">
     <div class="sec-title">${esc(sectionTitle(rx, "examination", "Other Examination Findings"))}</div>
     <div class="sec-body">
@@ -338,9 +338,13 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
         ${rx.adnexa ? `<tr><td class="exam-lbl">${esc(rx.subsectionTitles?.["examination:adnexa"] || "Adnexa")}</td><td>${esc(rx.adnexa)}</td></tr>` : ""}
         ${rx.anteriorSegment ? `<tr><td class="exam-lbl">${esc(rx.subsectionTitles?.["examination:anteriorSegment"] || "Anterior Segment")}</td><td>${esc(rx.anteriorSegment)}</td></tr>` : ""}
         ${rx.posteriorSegment ? `<tr><td class="exam-lbl">${esc(rx.subsectionTitles?.["examination:posteriorSegment"] || "Posterior Segment")}</td><td>${esc(rx.posteriorSegment)}</td></tr>` : ""}
-        ${(rx.gatRight || rx.gatLeft) ? `<tr><td class="exam-lbl">${esc(sectionTitle(rx, "gat", "IOP"))}</td><td>RE: ${esc(rx.gatRight) || "—"} &nbsp; LE: ${esc(rx.gatLeft) || "—"} mmHg</td></tr>` : ""}
       </tbody></table>
     </div>
+  </div>` : ""}
+  ${showSection(rx, "gat") && (rx.gatRight || rx.gatLeft) ? `
+  <div class="section">
+    <div class="sec-title">${esc(sectionTitle(rx, "gat", "IOP"))}</div>
+    <div class="sec-body"><table class="exam-table"><tbody><tr><td class="exam-lbl">Pressure</td><td>RE: ${esc(rx.gatRight) || "—"} &nbsp; LE: ${esc(rx.gatLeft) || "—"} mmHg</td></tr></tbody></table></div>
   </div>` : ""}
 
   <!-- Diagnosis -->
@@ -358,7 +362,7 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- Spectacle Correction -->
-  ${showSection(rx, "spectacle") && (rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeDistance?.va || rx.leftEyeDistance?.va || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp || rx.rightEyeNear?.va || rx.leftEyeNear?.va) ? `
+  ${showSection(rx, "spectacle") && (rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeDistance?.dcyl || rx.leftEyeDistance?.dcyl || rx.rightEyeDistance?.axis || rx.leftEyeDistance?.axis || rx.rightEyeDistance?.va || rx.leftEyeDistance?.va || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp || rx.rightEyeNear?.dcyl || rx.leftEyeNear?.dcyl || rx.rightEyeNear?.axis || rx.leftEyeNear?.axis || rx.rightEyeNear?.va || rx.leftEyeNear?.va) ? `
   <div class="section">
     <div class="sec-title">${esc(sectionTitle(rx, "spectacle", "Spectacle Correction"))}</div>
     <div class="sec-body">
@@ -388,21 +392,21 @@ export function generateFullPrintHTML(rx: Prescription, doctor: DoctorProfile, q
   </div>` : ""}
 
   <!-- Advice -->
-  ${showSection(rx, "advice") && rx.advice ? `
+  ${showSection(rx, "advice") && (rx.advice || rx.adviceBn) ? `
   <div class="section">
     <div class="sec-title">${esc(sectionTitle(rx, "advice", "Advice/উপদেশ"))}</div>
     <div class="sec-body">
-      <div class="advice-en">${esc(rx.advice)}</div>
+       ${rx.advice ? `<div class="advice-en">${esc(rx.advice)}</div>` : ""}
       ${rx.adviceBn ? `<div class="advice-bn">${esc(rx.adviceBn)}</div>` : ""}
     </div>
   </div>` : ""}
 
   <!-- Follow-up -->
-  ${showSection(rx, "followUp") && rx.followUp ? `
+  ${showSection(rx, "followUp") && (rx.followUp || rx.followUpBn) ? `
   <div class="section">
     <div class="sec-title">${esc(sectionTitle(rx, "followUp", "Follow-Up Time"))}</div>
     <div class="sec-body">
-      <div class="followup">📅 ${esc(rx.followUp)}</div>
+       ${rx.followUp ? `<div class="followup">📅 ${esc(rx.followUp)}</div>` : ""}
       ${rx.followUpBn && rx.followUpBn !== rx.followUp ? `<div class="followup-bn">${esc(rx.followUpBn)}</div>` : ""}
     </div>
   </div>` : ""}
@@ -485,20 +489,20 @@ export function generateRxPadHTML(rx: Prescription): string {
 
   ${showSection(rx, "drugs") && rx.drugs?.filter((d) => d.name).length ? drugsSection(rx.drugs) : ""}
 
-  ${showSection(rx, "spectacle") && (rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeDistance?.va || rx.leftEyeDistance?.va || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp || rx.rightEyeNear?.va || rx.leftEyeNear?.va) ? `
+  ${showSection(rx, "spectacle") && (rx.rightEyeDistance?.dsp || rx.leftEyeDistance?.dsp || rx.rightEyeDistance?.dcyl || rx.leftEyeDistance?.dcyl || rx.rightEyeDistance?.axis || rx.leftEyeDistance?.axis || rx.rightEyeDistance?.va || rx.leftEyeDistance?.va || rx.rightEyeNear?.dsp || rx.leftEyeNear?.dsp || rx.rightEyeNear?.dcyl || rx.leftEyeNear?.dcyl || rx.rightEyeNear?.axis || rx.leftEyeNear?.axis || rx.rightEyeNear?.va || rx.leftEyeNear?.va) ? `
   <table><tbody>
     ${rxBlock("Distance (D)", rx.rightEyeDistance, rx.leftEyeDistance)}
     ${rxBlock("Near (N)", rx.rightEyeNear, rx.leftEyeNear)}
   </tbody></table>
-  ${rx.ipd ? `<div class="field small">IPD D: ${esc(rx.ipd)} mm${rx.nearIPD ? ` / N: ${esc(rx.nearIPD)} mm` : ""}</div>` : ""}` : ""}
+   ${(rx.ipd || rx.nearIPD) ? `<div class="field small">${rx.ipd ? `IPD D: ${esc(rx.ipd)} mm` : ""}${rx.nearIPD ? `${rx.ipd ? " / " : ""}N: ${esc(rx.nearIPD)} mm` : ""}</div>` : ""}` : ""}
 
   ${showSection(rx, "lens") && lensOpts.length ? `<div class="field small">${lensOpts.join(" · ")}</div>` : ""}
 
   ${showSection(rx, "investigations") && rx.investigations ? `<div class="field"><span class="small">Investigations:</span> <span class="val">${esc(rx.investigations)}</span></div>` : ""}
 
-  ${showSection(rx, "advice") && rx.advice ? `<hr/><div class="field">${rx.adviceBn ? `<span class="bn val">${esc(rx.adviceBn)}</span>` : `<span class="val">${esc(rx.advice)}</span>`}</div>` : ""}
+  ${showSection(rx, "advice") && (rx.advice || rx.adviceBn) ? `<hr/><div class="field">${rx.advice ? `<span class="val">${esc(rx.advice)}</span>` : ""}${rx.adviceBn ? `<br/><span class="bn val">${esc(rx.adviceBn)}</span>` : ""}</div>` : ""}
 
-  ${showSection(rx, "followUp") && rx.followUp ? `<div class="field">${rx.followUpBn && rx.followUpBn !== rx.followUp ? `<span class="bn val">${esc(rx.followUpBn)}</span>` : `<span class="val">${esc(rx.followUp)}</span>`}</div>` : ""}
+  ${showSection(rx, "followUp") && (rx.followUp || rx.followUpBn) ? `<div class="field">${rx.followUp ? `<span class="val">${esc(rx.followUp)}</span>` : ""}${rx.followUpBn ? `<br/><span class="bn val">${esc(rx.followUpBn)}</span>` : ""}</div>` : ""}
 
   ${customSectionsHTML(rx)}
 </div>
@@ -530,7 +534,7 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: ${width}mm; height: ${height}mm; margin: 0; padding: 0; overflow: hidden; }
   body { font-family: 'Roboto', 'Noto Sans Bengali', Arial, sans-serif; background: transparent; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background: transparent url("${imageUri.replace(/"/g, "&quot;")}") center / 100% 100% no-repeat; }
+  .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background-color: #fff; background-image: url("${imageUri.replace(/"/g, "&quot;")}"); background-position: top left; background-size: contain; background-repeat: no-repeat; }
   .overlay-field { position: absolute; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.22; font-weight: 500; color: #111; }
 </style>
 </head>

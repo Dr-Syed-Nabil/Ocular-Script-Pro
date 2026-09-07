@@ -218,8 +218,8 @@ function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackNa
     id: typeof saved.id === "string" && saved.id.trim() ? saved.id.trim() : fallbackId,
     name: typeof saved.name === "string" && saved.name.trim() ? saved.name.trim() : fallbackName,
     imageUri: typeof saved.imageUri === "string" && saved.imageUri ? saved.imageUri : undefined,
-    imageWidthPx: typeof saved.imageWidthPx === "number" ? saved.imageWidthPx : undefined,
-    imageHeightPx: typeof saved.imageHeightPx === "number" ? saved.imageHeightPx : undefined,
+    imageWidthPx: typeof saved.imageWidthPx === "number" && Number.isFinite(saved.imageWidthPx) && saved.imageWidthPx > 0 ? saved.imageWidthPx : undefined,
+    imageHeightPx: typeof saved.imageHeightPx === "number" && Number.isFinite(saved.imageHeightPx) && saved.imageHeightPx > 0 ? saved.imageHeightPx : undefined,
     paperWidthMm: Math.max(20, typeof saved.paperWidthMm === "number" && Number.isFinite(saved.paperWidthMm) ? saved.paperWidthMm : DEFAULT_RX_PAD_OVERLAY.paperWidthMm),
     paperHeightMm: Math.max(20, typeof saved.paperHeightMm === "number" && Number.isFinite(saved.paperHeightMm) ? saved.paperHeightMm : DEFAULT_RX_PAD_OVERLAY.paperHeightMm),
     fields,
@@ -276,7 +276,7 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
   const sections = DEFAULT_PRESCRIPTION_CONFIG.sections.map((fallback) => {
     const saved = rawSections.find((section) => section?.id === fallback.id)
       || (fallback.id === "investigations"
-        ? rawSections.find((section) => section?.title?.trim().toLowerCase() === "investigations")
+        ? rawSections.find((section) => typeof section?.title === "string" && section.title.trim().toLowerCase() === "investigations")
         : undefined);
     const savedOptions = saved?.options;
     const options = fallback.id === "advice" && (!input.version || input.version < 4)
@@ -300,13 +300,11 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
     };
   });
   rawSections
-    .filter((section) =>
-      section
-      && typeof section === "object"
-      && section.id
-      && !sections.some((item) => item.id === section.id)
-      && section.title?.trim().toLowerCase() !== "investigations"
-    )
+    .filter((section) => {
+      if (!section || typeof section !== "object" || !section.id) return false;
+      const title = typeof section.title === "string" ? section.title.trim().toLowerCase() : "";
+      return !sections.some((item) => item.id === section.id) && title !== "investigations";
+    })
     .forEach((section) => {
       if (typeof section.title === "string" && section.title.trim()) {
         sections.push({
@@ -325,8 +323,16 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
     ? cleanOptions(savedChiefComplaints, DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints)
     : cleanOptions([...DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints, ...savedChiefComplaints], DEFAULT_PRESCRIPTION_CONFIG.chiefComplaints);
   const rawOverlays = Array.isArray(input.rxPadOverlays) ? input.rxPadOverlays : [];
+  const usedOverlayIds = new Set<string>();
   const overlays = (rawOverlays.length ? rawOverlays : [input.rxPadOverlay || DEFAULT_RX_PAD_OVERLAY])
-    .map((value, index) => normalizeRxPadOverlay(value, `rx-pad-${index + 1}`, index === 0 ? "Nabil A4 Rx Pad" : `Rx Pad ${index + 1}`));
+    .map((value, index) => {
+      const overlay = normalizeRxPadOverlay(value, `rx-pad-${index + 1}`, index === 0 ? "Nabil A4 Rx Pad" : `Rx Pad ${index + 1}`);
+      let id = overlay.id;
+      let suffix = 2;
+      while (usedOverlayIds.has(id)) id = `${overlay.id}-${suffix++}`;
+      usedOverlayIds.add(id);
+      return id === overlay.id ? overlay : { ...overlay, id };
+    });
   const activeRxPadOverlayId = typeof input.activeRxPadOverlayId === "string" && overlays.some((overlay) => overlay.id === input.activeRxPadOverlayId)
     ? input.activeRxPadOverlayId
     : overlays[0].id;

@@ -1,23 +1,50 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MAX_SUGGESTIONS = 30;
 const PREFIX = "@optiscript_suggestions_";
+const writeQueues = new Map<string, Promise<void>>();
+
+function safeSuggestions(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length >= 3)
+      .filter((item, index, items) => items.findIndex((candidate) => candidate.toLowerCase() === item.toLowerCase()) === index)
+      .slice(0, MAX_SUGGESTIONS);
+  } catch {
+    return [];
+  }
+}
+
+function queueWrite(key: string, items: string[]) {
+  const previous = writeQueues.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => AsyncStorage.setItem(key, JSON.stringify(items)));
+  writeQueues.set(key, next);
+  return next;
+}
 
 export function useSuggestions(fieldKey: string) {
   const key = PREFIX + fieldKey;
   const [all, setAll] = useState<string[]>([]);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    AsyncStorage.getItem(key).then((raw) => {
-      if (raw) setAll(JSON.parse(raw));
-    });
+    mounted.current = true;
+    AsyncStorage.getItem(key)
+      .then((raw) => { if (mounted.current) setAll(safeSuggestions(raw)); })
+      .catch(() => undefined);
+    return () => { mounted.current = false; };
   }, [key]);
 
   const persist = useCallback(
     (items: string[]) => {
       setAll(items);
-      AsyncStorage.setItem(key, JSON.stringify(items));
+      void queueWrite(key, items);
     },
     [key]
   );
@@ -31,7 +58,7 @@ export function useSuggestions(fieldKey: string) {
           (s) => s.toLowerCase() !== trimmed.toLowerCase()
         );
         const updated = [trimmed, ...filtered].slice(0, MAX_SUGGESTIONS);
-        AsyncStorage.setItem(key, JSON.stringify(updated));
+        void queueWrite(key, updated);
         return updated;
       });
     },
@@ -42,7 +69,7 @@ export function useSuggestions(fieldKey: string) {
     (text: string) => {
       setAll((prev) => {
         const updated = prev.filter((s) => s !== text);
-        AsyncStorage.setItem(key, JSON.stringify(updated));
+        void queueWrite(key, updated);
         return updated;
       });
     },

@@ -122,7 +122,7 @@ function RxTable({ reD, leD, reN, leN, ipd }: {
   };
 
   const TableBlock = ({ title, re, le }: { title: string; re: EyeSpectacleRx; le: EyeSpectacleRx }) => {
-    if (!re.dsp && !re.dcyl && !le.dsp && !le.dcyl) return null;
+    if (!re.dsp && !re.dcyl && !re.axis && !re.va && !le.dsp && !le.dcyl && !le.axis && !le.va) return null;
     return (
       <>
         <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 12, paddingVertical: 6 }}>
@@ -195,6 +195,10 @@ export default function PrescriptionDetailScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const patient = patients.find((p) => p.id === rx?.patientId);
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  };
 
   const handleDuplicate = () => {
     if (!rx) return;
@@ -212,9 +216,10 @@ export default function PrescriptionDetailScreen() {
     setPrinting(true);
     try {
       let qrSvg: string | undefined;
-      if (mode === "full" && patient?.puid) {
+        const qrValue = rx.patientPuid || patient?.puid;
+        if (mode === "full" && qrValue) {
         try {
-          qrSvg = await QRCodeLib.toString(patient.puid, { type: "svg", width: 60, margin: 1, color: { dark: "#0D1B2A", light: "#ffffff" } });
+          qrSvg = await QRCodeLib.toString(qrValue, { type: "svg", width: 60, margin: 1, color: { dark: "#0D1B2A", light: "#ffffff" } });
         } catch { /* skip QR if fails */ }
       }
       const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
@@ -251,7 +256,7 @@ export default function PrescriptionDetailScreen() {
   if (!rx) {
     return (
       <View style={[s.container, { paddingTop: topPad }]}>
-        <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.iconBtn} onPress={goBack}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <View style={s.centered}>
@@ -269,7 +274,7 @@ export default function PrescriptionDetailScreen() {
         onPress: async () => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           await deletePrescription(rx.id);
-          router.back();
+          goBack();
         },
       },
     ]);
@@ -331,7 +336,7 @@ export default function PrescriptionDetailScreen() {
       </Modal>
 
       <View style={s.navBar}>
-        <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.iconBtn} onPress={goBack}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={s.navTitle} numberOfLines={1}>{rx.patientName}</Text>

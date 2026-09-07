@@ -73,6 +73,9 @@ export default function SignInScreen() {
 
   const completePasswordSignIn = async () => {
     await persistRememberedEmail();
+    // Activate the session before enrolling a biometric credential. Clerk
+    // associates the credential with the active account.
+    await signIn.finalize();
     if (enableBiometrics && biometricAvailable && !biometricEnrolled) {
       try {
         await enroll({
@@ -85,7 +88,7 @@ export default function SignInScreen() {
         setNotice("Signed in successfully. Biometric setup was skipped.");
       }
     }
-    await signIn.finalize({ navigate: finish });
+    finish();
   };
 
   const handleSubmit = async () => {
@@ -93,7 +96,7 @@ export default function SignInScreen() {
     setNotice("");
     const { error } = await signIn.password({ emailAddress: emailAddress.trim(), password });
     if (error) {
-      setErrorMessage(error.message || "Unable to sign in. Please check your details.");
+        setErrorMessage("Unable to sign in. Please check your details.");
       return;
     }
     if (signIn.status === "complete") {
@@ -121,7 +124,7 @@ export default function SignInScreen() {
     }
     const { error } = await signIn.mfa.verifyEmailCode({ code: verificationCode.trim() });
     if (error) {
-      setErrorMessage(error.message || "That verification code is invalid or expired.");
+      setErrorMessage("That verification code is invalid or expired.");
       return;
     }
     if (signIn.status === "complete") {
@@ -136,7 +139,7 @@ export default function SignInScreen() {
     setNotice("");
     const { error } = await signIn.mfa.sendEmailCode();
     if (error) {
-      setErrorMessage(error.message || "We couldn't resend the verification code.");
+      setErrorMessage("We couldn't resend the verification code.");
       return;
     }
     setNotice(`A new verification code was sent to ${emailAddress.trim()}.`);
@@ -176,7 +179,7 @@ export default function SignInScreen() {
     try {
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy: "oauth_google",
-        redirectUrl: AuthSession.makeRedirectUri({ scheme: "mobile" }),
+        redirectUrl: Platform.OS === "web" ? AuthSession.makeRedirectUri() : AuthSession.makeRedirectUri({ scheme: "mobile" }),
       });
       if (createdSessionId) {
         await setActive?.({ session: createdSessionId, navigate: finish });
@@ -184,7 +187,7 @@ export default function SignInScreen() {
         setErrorMessage("Google sign-in needs another verification step.");
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Google sign-in was not completed.");
+      setErrorMessage("Google sign-in was not completed.");
     }
   };
 
