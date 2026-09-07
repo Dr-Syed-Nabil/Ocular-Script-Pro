@@ -32,6 +32,18 @@ const colors = {
 
     surface: "#F8FAFD",
     overlay: "rgba(13,27,42,0.45)",
+
+    // OptiScript command-deck surfaces used by the prescriptions workspace.
+    clinicalHero: "#102C3D",
+    clinicalHeroMuted: "#88B5B4",
+    clinicalAccent: "#7ED9C8",
+    clinicalAccentStrong: "#1B9B83",
+    clinicalCanvas: "#F6F8F6",
+    clinicalSoft: "#E8F3F0",
+    clinicalSoftAlt: "#E9EFEE",
+    clinicalInkMuted: "#78939A",
+    clinicalCardBorder: "#E0E8E6",
+    clinicalWarning: "#E66D5D",
   },
 
   radius: 12,
