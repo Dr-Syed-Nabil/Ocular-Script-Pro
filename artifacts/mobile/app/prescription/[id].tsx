@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
-import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML } from "@/utils/generatePrescriptionHTML";
+import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML, hasRxPadOverlayContent } from "@/utils/generatePrescriptionHTML";
 import { QRDisplay } from "@/components/QRDisplay";
 import QRCodeLib from "qrcode";
 
@@ -212,6 +212,22 @@ export default function PrescriptionDetailScreen() {
 
   const handlePrint = async (mode: "full" | "pad") => {
     if (!rx) return;
+    const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
+      || prescriptionConfig.rxPadOverlay;
+    const hasOverlayImage = mode === "pad" && Boolean(activeRxPadOverlay?.imageUri);
+    if (hasOverlayImage && activeRxPadOverlay && !hasRxPadOverlayContent(rx, activeRxPadOverlay)) {
+      setShowPrintModal(false);
+      Alert.alert(
+        "Rx Pad is empty",
+        "No enabled Rx Pad field has printable content. Enable a field or enter prescription details, then try again.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Review Rx Pad", onPress: () => router.push("/rx-pad-settings") },
+        ],
+      );
+      return;
+    }
+
     setShowPrintModal(false);
     setPrinting(true);
     try {
@@ -222,8 +238,6 @@ export default function PrescriptionDetailScreen() {
           qrSvg = await QRCodeLib.toString(qrValue, { type: "svg", width: 60, margin: 1, color: { dark: "#0D1B2A", light: "#ffffff" } });
         } catch { /* skip QR if fails */ }
       }
-      const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
-        || prescriptionConfig.rxPadOverlay;
       const html = mode === "full"
         ? generateFullPrintHTML(rx, doctor, qrSvg)
         : activeRxPadOverlay?.imageUri

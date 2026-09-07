@@ -13,7 +13,7 @@ import {
   MIN_RX_PAD_FIELD_HEIGHT_MM,
   MIN_RX_PAD_FIELD_WIDTH_MM,
 } from "@/utils/rxPadOverlay";
-import { generateRxPadOverlayHTML } from "@/utils/generatePrescriptionHTML";
+import { generateRxPadOverlayHTML, hasRxPadOverlayContent } from "@/utils/generatePrescriptionHTML";
 import type { Prescription } from "@/types";
 
 const paper = { width: 100, height: 80 };
@@ -417,4 +417,48 @@ test("does not render placeholder-only empty visual acuity or spectacle fields",
 
   assert.doesNotMatch(html, /class="overlay-field"/);
   assert.doesNotMatch(html, /RE:|LE:|D:|N:/);
+});
+
+test("detects when an overlay has no enabled printable fields", () => {
+  const overlay = {
+    id: "custom-pad",
+    name: "Custom pad",
+    paperWidthMm: 100,
+    paperHeightMm: 80,
+    fields: [
+      { ...field, id: "patient", enabled: false },
+      { ...field, id: "chiefComplaints", enabled: true },
+      { ...field, id: "diagnosis", enabled: true, printMode: "selected" as const, contentSelection: [] },
+    ],
+  };
+
+  assert.equal(hasRxPadOverlayContent(emptyPrescription, overlay), false);
+  assert.equal(
+    hasRxPadOverlayContent({ ...emptyPrescription, diagnosis: "Cataract" }, overlay),
+    false,
+    "selected fields with no selected content must stay empty",
+  );
+  assert.equal(
+    hasRxPadOverlayContent(
+      { ...emptyPrescription, chiefComplaints: "Blurred vision" },
+      overlay,
+    ),
+    true,
+  );
+});
+
+test("keeps overlay HTML output unchanged when a field has printable content", () => {
+  const html = generateRxPadOverlayHTML(
+    { ...emptyPrescription, diagnosis: "Cataract" },
+    {
+      id: "custom-pad",
+      name: "Custom pad",
+      paperWidthMm: 100,
+      paperHeightMm: 80,
+      fields: [{ ...field, id: "diagnosis" }],
+    },
+  );
+
+  assert.match(html, /class="overlay-field"/);
+  assert.match(html, />Cataract<\/div>/);
 });

@@ -103,7 +103,7 @@ function customSectionsHTML(rx: Prescription): string {
     .join("");
 }
 
-function overlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
+function getRxPadOverlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
   const { id } = field;
   const include = (contentId: string) =>
     field.printMode !== "selected" || Boolean(field.contentSelection?.includes(contentId));
@@ -223,6 +223,10 @@ function overlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
     default:
       return "";
   }
+}
+
+export function hasRxPadOverlayContent(rx: Prescription, overlay: RxPadOverlayConfig): boolean {
+  return overlay.fields.some((field) => field.enabled && getRxPadOverlayFieldValue(rx, field).trim().length > 0);
 }
 
 function showSection(rx: Prescription, id: string): boolean {
@@ -584,7 +588,7 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
     .filter((field) => field.enabled)
     .map((field) => {
       const constrainedField = constrainRxPadOverlayField(field, width, height);
-      const value = overlayFieldValue(rx, field);
+      const value = getRxPadOverlayFieldValue(rx, field);
       if (!value.trim()) return "";
       const safeValue = esc(value).replace(/\n/g, "<br/>");
       return `<div class="overlay-field" style="left:${constrainedField.x}mm;top:${constrainedField.y}mm;width:${constrainedField.width}mm;height:${constrainedField.height}mm;font-size:${constrainedField.fontSize}pt">${safeValue}</div>`;
