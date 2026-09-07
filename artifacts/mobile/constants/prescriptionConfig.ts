@@ -1,4 +1,10 @@
-import { PrescriptionConfig, PrescriptionSectionConfig, PrescriptionSubsectionConfig } from "@/types";
+import {
+  PrescriptionConfig,
+  PrescriptionSectionConfig,
+  PrescriptionSubsectionConfig,
+  RxPadOverlayConfig,
+  RxPadOverlayField,
+} from "@/types";
 
 export const INVESTIGATION_GROUPS = [
   {
@@ -59,7 +65,26 @@ export const INVESTIGATION_GROUPS = [
 export const DEFAULT_INVESTIGATION_OPTIONS = INVESTIGATION_GROUPS.flatMap((group) => [...group.options]);
 
 export const DEFAULT_PRESCRIPTION_CONFIG: PrescriptionConfig = {
-  version: 7,
+  version: 8,
+  rxPadOverlay: {
+    paperWidthMm: 210,
+    paperHeightMm: 297,
+    fields: [
+      { id: "patient", label: "Patient particulars", enabled: true, x: 14, y: 10, width: 182, height: 12, fontSize: 10 },
+      { id: "chiefComplaints", label: "Chief complaints", enabled: true, x: 14, y: 25, width: 182, height: 14, fontSize: 10 },
+      { id: "pastHistory", label: "History", enabled: true, x: 14, y: 42, width: 182, height: 12, fontSize: 9 },
+      { id: "visualAcuity", label: "Visual acuity", enabled: true, x: 14, y: 57, width: 182, height: 22, fontSize: 9 },
+      { id: "examination", label: "Examination findings", enabled: true, x: 14, y: 82, width: 182, height: 24, fontSize: 9 },
+      { id: "gat", label: "IOP", enabled: true, x: 14, y: 109, width: 182, height: 10, fontSize: 9 },
+      { id: "diagnosis", label: "Diagnosis", enabled: true, x: 14, y: 122, width: 182, height: 16, fontSize: 10 },
+      { id: "drugs", label: "Treatment (Rx)", enabled: true, x: 14, y: 141, width: 182, height: 45, fontSize: 9 },
+      { id: "spectacle", label: "Spectacle correction", enabled: true, x: 14, y: 189, width: 182, height: 28, fontSize: 9 },
+      { id: "lens", label: "Lens options", enabled: true, x: 14, y: 220, width: 182, height: 12, fontSize: 9 },
+      { id: "investigations", label: "Investigations", enabled: true, x: 14, y: 235, width: 182, height: 12, fontSize: 9 },
+      { id: "advice", label: "Advice", enabled: true, x: 14, y: 250, width: 182, height: 22, fontSize: 9 },
+      { id: "followUp", label: "Follow-up", enabled: true, x: 14, y: 277, width: 182, height: 12, fontSize: 9 },
+    ],
+  },
   categoryTitles: {
     chiefComplaints: "Chief Complaints",
     visualAcuity: "Visual Acuity",
@@ -163,6 +188,40 @@ function cleanOptions(value: unknown, fallback: string[]): string[] {
   return result;
 }
 
+const DEFAULT_RX_PAD_OVERLAY = DEFAULT_PRESCRIPTION_CONFIG.rxPadOverlay as RxPadOverlayConfig;
+
+function normalizeOverlayField(fallback: RxPadOverlayField, savedValue: unknown): RxPadOverlayField {
+  const saved = savedValue && typeof savedValue === "object" ? savedValue as Partial<RxPadOverlayField> : {};
+  const numberOr = (value: unknown, fallbackValue: number) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallbackValue;
+  return {
+    ...fallback,
+    label: typeof saved.label === "string" && saved.label.trim() ? saved.label.trim() : fallback.label,
+    enabled: saved.enabled !== false,
+    x: Math.max(0, numberOr(saved.x, fallback.x)),
+    y: Math.max(0, numberOr(saved.y, fallback.y)),
+    width: Math.max(5, numberOr(saved.width, fallback.width)),
+    height: Math.max(4, numberOr(saved.height, fallback.height)),
+    fontSize: Math.max(5, Math.min(48, numberOr(saved.fontSize, fallback.fontSize))),
+  };
+}
+
+function normalizeRxPadOverlay(value: unknown): RxPadOverlayConfig {
+  const saved = value && typeof value === "object" ? value as Partial<RxPadOverlayConfig> : {};
+  const fields = DEFAULT_RX_PAD_OVERLAY.fields.map((fallback) => {
+    const savedField = Array.isArray(saved.fields) ? saved.fields.find((item) => item?.id === fallback.id) : undefined;
+    return normalizeOverlayField(fallback, savedField);
+  });
+  return {
+    imageUri: typeof saved.imageUri === "string" && saved.imageUri ? saved.imageUri : undefined,
+    imageWidthPx: typeof saved.imageWidthPx === "number" ? saved.imageWidthPx : undefined,
+    imageHeightPx: typeof saved.imageHeightPx === "number" ? saved.imageHeightPx : undefined,
+    paperWidthMm: Math.max(20, typeof saved.paperWidthMm === "number" && Number.isFinite(saved.paperWidthMm) ? saved.paperWidthMm : DEFAULT_RX_PAD_OVERLAY.paperWidthMm),
+    paperHeightMm: Math.max(20, typeof saved.paperHeightMm === "number" && Number.isFinite(saved.paperHeightMm) ? saved.paperHeightMm : DEFAULT_RX_PAD_OVERLAY.paperHeightMm),
+    fields,
+  };
+}
+
 function normalizeSubsections(
   fallback: PrescriptionSubsectionConfig[] = [],
   savedValue: unknown,
@@ -264,6 +323,7 @@ export function normalizePrescriptionConfig(raw: unknown): PrescriptionConfig {
 
   return {
     version: DEFAULT_PRESCRIPTION_CONFIG.version,
+    rxPadOverlay: normalizeRxPadOverlay(input.rxPadOverlay),
     categoryTitles: Object.fromEntries(
       Object.entries(DEFAULT_PRESCRIPTION_CONFIG.categoryTitles || {}).map(([id, fallback]) => [
         id,

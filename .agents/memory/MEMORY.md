@@ -1,1 +1,2 @@
 - [Expo Metro image-size compatibility](expo-metro-image-size.md) — do not globally force image-size 2.x; Metro 0.83 expects its 1.x API.
+- [Rx pad scan storage](rx-pad-scan-storage.md) — overlay scans are kept locally for offline, single-device printing; revisit storage limits before scaling.

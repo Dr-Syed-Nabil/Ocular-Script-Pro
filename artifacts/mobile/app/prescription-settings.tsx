@@ -343,6 +343,22 @@ export default function PrescriptionSettingsScreen() {
           </Text>
         </View>
 
+        <TouchableOpacity
+          style={[styles.rxPadCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => router.push("/rx-pad-settings")}
+        >
+          <View style={[styles.rxPadIcon, { backgroundColor: colors.secondary }]}>
+            <Feather name="layout" size={20} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>Rx Pad Overlay</Text>
+            <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>
+              Upload your pre-printed pad, set its exact size, and position every prescription category before printing.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
+
         <SectionEditor sections={draft.sections} onChange={(sections) => setDraft((current) => ({ ...current, sections }))} />
         <CategoryOptionEditor id="chiefComplaints" title={draft.categoryTitles?.chiefComplaints || "Chief Complaints"} description="Symptoms shown in the complaint picker." options={draft.chiefComplaints} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, chiefComplaints: title } }))} onChange={(value) => setOptions("chiefComplaints", value)} />
         <CategoryOptionEditor id="visualAcuity" title={draft.categoryTitles?.visualAcuity || "Visual Acuity"} description="Options for UA, WA, PH and BCVA." options={draft.visualAcuity} onTitleChange={(title) => setDraft((current) => ({ ...current, categoryTitles: { ...current.categoryTitles, visualAcuity: title } }))} onChange={(value) => setOptions("visualAcuity", value)} />
@@ -370,6 +386,8 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 4 },
   infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderRadius: 12, padding: 12, marginBottom: 14 },
   infoText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  rxPadCard: { flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 15, borderWidth: 1, padding: 14, marginBottom: 14 },
+  rxPadIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   card: { borderRadius: 15, borderWidth: 1, padding: 14, marginBottom: 14 },
   cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   cardTitleInput: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, fontSize: 15, fontFamily: "Inter_700Bold" },

@@ -1,4 +1,4 @@
-import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription } from "@/types";
+import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig } from "@/types";
 
 /* ── helpers ── */
 function esc(s: string | undefined): string {
@@ -95,6 +95,71 @@ function customSectionsHTML(rx: Prescription): string {
         <div class="sec-body"><p class="advice-en">${esc(section.content).replace(/\n/g, "<br/>")}</p></div>
       </div>`)
     .join("");
+}
+
+function overlayFieldValue(rx: Prescription, id: string): string {
+  const eye = (value: EyeSpectacleRx) => [value.dsp, value.dcyl, value.axis, value.va].filter(Boolean).join(" / ");
+  switch (id) {
+    case "patient":
+      return [
+        rx.patientName,
+        rx.patientAge && `Age: ${rx.patientAge}`,
+        rx.patientWeight && `Weight: ${rx.patientWeight}`,
+        rx.patientPhone && `Phone: ${rx.patientPhone}`,
+        rx.patientPuid && `PUID: ${rx.patientPuid}`,
+        formatDate(rx.date),
+      ].filter(Boolean).join("  ·  ");
+    case "chiefComplaints":
+      return rx.chiefComplaints || "";
+    case "pastHistory": {
+      const history = [
+        rx.pastHistory?.dm && "DM", rx.pastHistory?.htn && "HTN", rx.pastHistory?.ihd && "IHD",
+        rx.pastHistory?.ckd && "CKD", rx.pastHistory?.ba && "BA", rx.pastHistory?.thyDs && "Thyroid Ds",
+        rx.pastHistory?.uromax && "Uromax", rx.pastHistory?.others, rx.pastHistoryNotes,
+      ].filter(Boolean) as string[];
+      return history.join("  /  ");
+    }
+    case "visualAcuity":
+      return [
+        `RE: UA ${rx.rightEyeVA?.ua || "—"} | WA ${rx.rightEyeVA?.wa || "—"} | PH ${rx.rightEyeVA?.ph || "—"} | BCVA ${rx.rightEyeVA?.bcva || "—"}`,
+        `LE: UA ${rx.leftEyeVA?.ua || "—"} | WA ${rx.leftEyeVA?.wa || "—"} | PH ${rx.leftEyeVA?.ph || "—"} | BCVA ${rx.leftEyeVA?.bcva || "—"}`,
+      ].join("\n");
+    case "examination":
+      return [
+        rx.adnexa && `Adnexa: ${rx.adnexa}`,
+        rx.anteriorSegment && `Anterior Segment: ${rx.anteriorSegment}`,
+        rx.posteriorSegment && `Posterior Segment: ${rx.posteriorSegment}`,
+      ].filter(Boolean).join("\n");
+    case "gat":
+      return rx.gatRight || rx.gatLeft ? `RE: ${rx.gatRight || "—"}  LE: ${rx.gatLeft || "—"} mmHg` : "";
+    case "diagnosis":
+      return rx.diagnosis || "";
+    case "drugs":
+      return (rx.drugs || []).filter((drug) => drug.name.trim()).map((drug) => {
+        const phases = drug.dosePhases?.length
+          ? drug.dosePhases.map((phase, index) =>
+            `${index && phase.connector ? `${phase.connector}, ` : ""}${phase.schedule} — ${phase.durationValue} ${phase.durationUnit}`
+          ).join(" ")
+          : [drug.scheduleBn || drug.schedule, drug.durationBn || drug.duration].filter(Boolean).join(" — ");
+        return `${drug.name}${drug.route ? ` (${drug.route})` : ""}: ${phases}${drug.notes ? ` — ${drug.notes}` : ""}`;
+      }).join("\n");
+    case "spectacle":
+      return [
+        `D: RE ${eye(rx.rightEyeDistance)} | LE ${eye(rx.leftEyeDistance)}`,
+        `N: RE ${eye(rx.rightEyeNear)} | LE ${eye(rx.leftEyeNear)}`,
+        rx.ipd && `IPD: ${rx.ipd}${rx.nearIPD ? ` / Near ${rx.nearIPD}` : ""}`,
+      ].filter(Boolean).join("\n");
+    case "lens":
+      return [rx.lensUsage, rx.lensType, ...(rx.lensCoating || []), rx.lensMaterial].filter(Boolean).join(" · ");
+    case "investigations":
+      return rx.investigations || "";
+    case "advice":
+      return [rx.adviceBn || rx.advice, rx.adviceBn && rx.advice !== rx.adviceBn ? rx.advice : ""].filter(Boolean).join("\n");
+    case "followUp":
+      return [rx.followUpBn || rx.followUp, rx.followUpBn && rx.followUp !== rx.followUpBn ? rx.followUp : ""].filter(Boolean).join("\n");
+    default:
+      return "";
+  }
 }
 
 function showSection(rx: Prescription, id: string): boolean {
@@ -438,5 +503,37 @@ export function generateRxPadHTML(rx: Prescription): string {
   ${customSectionsHTML(rx)}
 </div>
 </body>
+</html>`;
+}
+
+export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlayConfig): string {
+  const width = Math.max(20, overlay.paperWidthMm);
+  const height = Math.max(20, overlay.paperHeightMm);
+  const imageUri = overlay.imageUri || "";
+  const fields = overlay.fields
+    .filter((field) => field.enabled)
+    .map((field) => {
+      const value = overlayFieldValue(rx, field.id);
+      if (!value.trim()) return "";
+      const safeValue = esc(value).replace(/\n/g, "<br/>");
+      return `<div class="overlay-field" style="left:${field.x}mm;top:${field.y}mm;width:${field.width}mm;height:${field.height}mm;font-size:${field.fontSize}pt">${safeValue}</div>`;
+    })
+    .join("");
+  return `<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Rx Pad — ${esc(rx.patientName)}</title>
+<style>
+  @page { size: ${width}mm ${height}mm; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: ${width}mm; height: ${height}mm; margin: 0; padding: 0; overflow: hidden; }
+  body { font-family: 'Roboto', 'Noto Sans Bengali', Arial, sans-serif; background: transparent; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background: transparent url("${imageUri.replace(/"/g, "&quot;")}") center / 100% 100% no-repeat; }
+  .overlay-field { position: absolute; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.22; font-weight: 500; color: #111; }
+</style>
+</head>
+<body><div class="page">${fields}</div></body>
 </html>`;
 }

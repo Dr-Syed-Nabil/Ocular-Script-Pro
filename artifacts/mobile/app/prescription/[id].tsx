@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
-import { generateFullPrintHTML, generateRxPadHTML } from "@/utils/generatePrescriptionHTML";
+import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML } from "@/utils/generatePrescriptionHTML";
 import { QRDisplay } from "@/components/QRDisplay";
 import QRCodeLib from "qrcode";
 
@@ -219,10 +219,17 @@ export default function PrescriptionDetailScreen() {
       }
       const html = mode === "full"
         ? generateFullPrintHTML(rx, doctor, qrSvg)
-        : generateRxPadHTML(rx);
+        : prescriptionConfig.rxPadOverlay?.imageUri
+          ? generateRxPadOverlayHTML(rx, prescriptionConfig.rxPadOverlay)
+          : generateRxPadHTML(rx);
       if (Platform.OS === "web") {
         const win = window.open("", "_blank");
-        if (win) { win.document.write(html); win.document.close(); win.print(); }
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          win.onload = () => win.print();
+          setTimeout(() => win.print(), 350);
+        }
       } else {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         const canShare = await Sharing.isAvailableAsync();
@@ -305,6 +312,11 @@ export default function PrescriptionDetailScreen() {
               </View>
             </View>
           </TouchableOpacity>
+           <TouchableOpacity style={{ alignItems: "center", padding: 10, marginTop: 4 }} onPress={() => { setShowPrintModal(false); router.push("/rx-pad-settings"); }}>
+             <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>
+               Customize Rx Pad Overlay
+             </Text>
+           </TouchableOpacity>
 
           <TouchableOpacity style={{ marginTop: 14, alignItems: "center", padding: 10 }} onPress={() => setShowPrintModal(false)}>
             <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>Cancel</Text>

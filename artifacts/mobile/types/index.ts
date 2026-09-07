@@ -87,6 +87,26 @@ export interface PrescriptionSubsectionConfig {
   options: string[];
 }
 
+export interface RxPadOverlayField {
+  id: string;
+  label: string;
+  enabled: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+}
+
+export interface RxPadOverlayConfig {
+  imageUri?: string;
+  imageWidthPx?: number;
+  imageHeightPx?: number;
+  paperWidthMm: number;
+  paperHeightMm: number;
+  fields: RxPadOverlayField[];
+}
+
 export interface CustomPrescriptionSection {
   id: string;
   title: string;
@@ -98,6 +118,7 @@ export interface CustomPrescriptionSection {
 export interface PrescriptionConfig {
   version: number;
   categoryTitles?: Record<string, string>;
+  rxPadOverlay?: RxPadOverlayConfig;
   chiefComplaints: string[];
   visualAcuity: string[];
   distanceVA: string[];
