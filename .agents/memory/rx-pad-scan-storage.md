@@ -8,3 +8,9 @@ The bundled Nabil A4 scan is shipped as a static app asset; user-uploaded Rx pad
 **Why:** OptiScript’s current data model is local AsyncStorage, and the overlay must remain available on the same device after restart.
 
 **How to apply:** Keep scan compression and validation in mind when extending the feature. If users need high-resolution scans, multi-device sync, or many saved pad templates, move image bytes to file/object storage and persist only a reference in the configuration.
+
+The overlay editor supports direct manipulation: press and hold a category box to move it, then drag the selected bottom-right handle to resize it. Both gestures update the same bounded millimeter coordinates used for printing.
+
+**Why:** Exact overlay alignment is faster to tune visually than by repeatedly editing numeric fields, especially on a touch device.
+
+**How to apply:** Keep the numeric fields as the precise fallback, keep resize bounds inside the physical paper dimensions, and preserve the saved `RxPadOverlayField` shape for print compatibility.

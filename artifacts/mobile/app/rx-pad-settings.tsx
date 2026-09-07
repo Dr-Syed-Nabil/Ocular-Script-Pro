@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
