@@ -50,13 +50,31 @@ function OverlayFieldBox({
   onSelect: () => void;
   onChange: (patch: Partial<RxPadOverlayField>) => void;
 }) {
+  const dragStart = React.useRef({ x: field.x, y: field.y });
+  const resizeStart = React.useRef({ width: field.width, height: field.height });
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      dragStart.current = { x: field.x, y: field.y };
+    },
     onPanResponderMove: (_, gesture) => {
       onChange({
-        x: clamp(field.x + gesture.dx / scale, 0, Math.max(0, paperWidth - field.width)),
-        y: clamp(field.y + gesture.dy / scale, 0, Math.max(0, paperHeight - field.height)),
+        x: clamp(dragStart.current.x + gesture.dx / scale, 0, Math.max(0, paperWidth - field.width)),
+        y: clamp(dragStart.current.y + gesture.dy / scale, 0, Math.max(0, paperHeight - field.height)),
+      });
+    },
+  }), [field, onChange, paperHeight, paperWidth, scale]);
+  const resizeResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      resizeStart.current = { width: field.width, height: field.height };
+    },
+    onPanResponderMove: (_, gesture) => {
+      onChange({
+        width: clamp(resizeStart.current.width + gesture.dx / scale, 5, paperWidth - field.x),
+        height: clamp(resizeStart.current.height + gesture.dy / scale, 4, paperHeight - field.y),
       });
     },
   }), [field, onChange, paperHeight, paperWidth, scale]);
@@ -80,6 +98,32 @@ function OverlayFieldBox({
       <Text numberOfLines={2} style={{ color: "#1A6FAB", fontSize: Math.max(7, field.fontSize * scale * 0.8), fontWeight: "700" }}>
         {field.label}
       </Text>
+      {selected ? (
+        <View
+          {...resizeResponder.panHandlers}
+          accessibilityLabel={`Resize ${field.label}`}
+          style={{
+            position: "absolute",
+            right: -7,
+            bottom: -7,
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            borderWidth: 2,
+            borderColor: "#fff",
+            backgroundColor: "#1A6FAB",
+            alignItems: "center",
+            justifyContent: "center",
+            shadowColor: "#102C3D",
+            shadowOpacity: 0.2,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 2,
+          }}
+        >
+          <Feather name="maximize-2" size={9} color="#fff" />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -256,7 +300,7 @@ export default function RxPadSettingsScreen() {
       >
         <View style={[styles.infoBox, { backgroundColor: colors.secondary }]}>
           <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-            Upload a scan of the complete pre-printed pad. Enter its real paper size in millimeters, then drag each blue category box or edit its exact position and size below.
+            Upload a scan of the complete pre-printed pad. Enter its real paper size in millimeters, then press and hold a blue category to move it. Select a category and hold its corner handle to resize it.
           </Text>
         </View>
 
@@ -346,7 +390,7 @@ export default function RxPadSettingsScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.foreground }]}>Placement preview</Text>
           <Text style={[styles.cardDescription, { color: colors.mutedForeground }]}>
-            The preview is scaled to fit this screen. The PDF print remains at the physical size entered above.
+            The preview is scaled to fit this screen. Press and hold a category to move it, or drag the blue corner handle to resize it. The PDF print remains at the physical size entered above.
           </Text>
           <View style={[styles.previewFrame, { width: PREVIEW_WIDTH, height: previewHeight, borderColor: colors.border, backgroundColor: colors.surface }]}>
             {draft.imageUri ? <Image source={{ uri: draft.imageUri }} style={StyleSheet.absoluteFillObject} resizeMode="stretch" /> : (
