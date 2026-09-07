@@ -204,6 +204,10 @@ function normalizeOverlayField(fallback: RxPadOverlayField, savedValue: unknown)
     ...fallback,
     label: typeof saved.label === "string" && saved.label.trim() ? saved.label.trim() : fallback.label,
     enabled: saved.enabled !== false,
+    printMode: saved.printMode === "selected" ? "selected" : "all",
+    contentSelection: saved.printMode === "selected" && Array.isArray(saved.contentSelection)
+      ? saved.contentSelection.filter((item): item is string => typeof item === "string")
+      : undefined,
     x: Math.max(0, numberOr(saved.x, fallback.x)),
     y: Math.max(0, numberOr(saved.y, fallback.y)),
     width: Math.max(5, numberOr(saved.width, fallback.width)),

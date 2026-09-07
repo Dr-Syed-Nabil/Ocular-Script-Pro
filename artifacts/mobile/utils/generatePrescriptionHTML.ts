@@ -1,4 +1,4 @@
-import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig } from "@/types";
+import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig, RxPadOverlayField } from "@/types";
 import { constrainRxPadOverlayField, normalizeRxPadPaperSize } from "@/utils/rxPadOverlay";
 
 /* ── helpers ── */
@@ -98,66 +98,112 @@ function customSectionsHTML(rx: Prescription): string {
     .join("");
 }
 
-function overlayFieldValue(rx: Prescription, id: string): string {
+function overlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
+  const { id } = field;
+  const include = (contentId: string) =>
+    field.printMode !== "selected" || Boolean(field.contentSelection?.includes(contentId));
   const eye = (value: EyeSpectacleRx) => [value.dsp, value.dcyl, value.axis, value.va].filter(Boolean).join(" / ");
   switch (id) {
     case "patient":
       return [
-        rx.patientName,
-        rx.patientAge && `Age: ${rx.patientAge}`,
-        rx.patientWeight && `Weight: ${rx.patientWeight}`,
-        rx.patientPhone && `Phone: ${rx.patientPhone}`,
-        rx.patientPuid && `PUID: ${rx.patientPuid}`,
-        formatDate(rx.date),
+        include("name") && rx.patientName,
+        include("age") && rx.patientAge && `Age: ${rx.patientAge}`,
+        include("weight") && rx.patientWeight && `Weight: ${rx.patientWeight}`,
+        include("phone") && rx.patientPhone && `Phone: ${rx.patientPhone}`,
+        include("puid") && rx.patientPuid && `PUID: ${rx.patientPuid}`,
+        include("date") && formatDate(rx.date),
       ].filter(Boolean).join("  ·  ");
     case "chiefComplaints":
-      return rx.chiefComplaints || "";
+      return include("complaints") ? rx.chiefComplaints || "" : "";
     case "pastHistory": {
-      const history = [
+      const conditions = [
         rx.pastHistory?.dm && "DM", rx.pastHistory?.htn && "HTN", rx.pastHistory?.ihd && "IHD",
         rx.pastHistory?.ckd && "CKD", rx.pastHistory?.ba && "BA", rx.pastHistory?.thyDs && "Thyroid Ds",
-        rx.pastHistory?.uromax && "Uromax", rx.pastHistory?.others, rx.pastHistoryNotes,
+        rx.pastHistory?.uromax && "Uromax",
+      ].filter(Boolean) as string[];
+      const history = [
+        include("conditions") && conditions.join(" / "),
+        include("others") && rx.pastHistory?.others,
+        include("notes") && rx.pastHistoryNotes,
       ].filter(Boolean) as string[];
       return history.join("  /  ");
     }
-    case "visualAcuity":
+    case "visualAcuity": {
+      const vaLine = (value: EyeVA) => [
+        include("ua") && `UA ${value?.ua || "—"}`,
+        include("wa") && `WA ${value?.wa || "—"}`,
+        include("ph") && `PH ${value?.ph || "—"}`,
+        include("bcva") && `BCVA ${value?.bcva || "—"}`,
+      ].filter(Boolean).join(" | ");
       return [
-        `RE: UA ${rx.rightEyeVA?.ua || "—"} | WA ${rx.rightEyeVA?.wa || "—"} | PH ${rx.rightEyeVA?.ph || "—"} | BCVA ${rx.rightEyeVA?.bcva || "—"}`,
-        `LE: UA ${rx.leftEyeVA?.ua || "—"} | WA ${rx.leftEyeVA?.wa || "—"} | PH ${rx.leftEyeVA?.ph || "—"} | BCVA ${rx.leftEyeVA?.bcva || "—"}`,
+        `RE: ${vaLine(rx.rightEyeVA)}`,
+        `LE: ${vaLine(rx.leftEyeVA)}`,
       ].join("\n");
+    }
     case "examination":
       return [
-        rx.adnexa && `Adnexa: ${rx.adnexa}`,
-        rx.anteriorSegment && `Anterior Segment: ${rx.anteriorSegment}`,
-        rx.posteriorSegment && `Posterior Segment: ${rx.posteriorSegment}`,
+        include("adnexa") && rx.adnexa && `Adnexa: ${rx.adnexa}`,
+        include("anteriorSegment") && rx.anteriorSegment && `Anterior Segment: ${rx.anteriorSegment}`,
+        include("posteriorSegment") && rx.posteriorSegment && `Posterior Segment: ${rx.posteriorSegment}`,
       ].filter(Boolean).join("\n");
     case "gat":
-      return rx.gatRight || rx.gatLeft ? `RE: ${rx.gatRight || "—"}  LE: ${rx.gatLeft || "—"} mmHg` : "";
+      const pressure = [
+        include("right") && rx.gatRight && `RE: ${rx.gatRight}`,
+        include("left") && rx.gatLeft && `LE: ${rx.gatLeft}`,
+      ].filter(Boolean).join("  ");
+      return pressure ? `${pressure} mmHg` : "";
     case "diagnosis":
-      return rx.diagnosis || "";
+      return include("diagnosis") ? rx.diagnosis || "" : "";
     case "drugs":
       return (rx.drugs || []).filter((drug) => drug.name.trim()).map((drug) => {
-        const phases = drug.dosePhases?.length
+        const schedule = drug.dosePhases?.length
           ? drug.dosePhases.map((phase, index) =>
-            `${index && phase.connector ? `${phase.connector}, ` : ""}${phase.schedule} — ${phase.durationValue} ${phase.durationUnit}`
+            `${index && phase.connector ? `${phase.connector}, ` : ""}${phase.schedule}`
           ).join(" ")
-          : [drug.scheduleBn || drug.schedule, drug.durationBn || drug.duration].filter(Boolean).join(" — ");
-        return `${drug.name}${drug.route ? ` (${drug.route})` : ""}: ${phases}${drug.notes ? ` — ${drug.notes}` : ""}`;
+          : drug.scheduleBn || drug.schedule;
+        const duration = drug.dosePhases?.length
+          ? drug.dosePhases.map((phase) => `${phase.durationValue} ${phase.durationUnit}`).join(" ")
+          : drug.durationBn || drug.duration;
+        const details = [
+          include("name") && drug.name,
+          include("route") && drug.route && `(${drug.route})`,
+          include("schedule") && schedule && `: ${schedule}`,
+          include("duration") && duration && `— ${duration}`,
+          include("notes") && drug.notes && `— ${drug.notes}`,
+        ].filter(Boolean);
+        return details.join(" ");
       }).join("\n");
-    case "spectacle":
+    case "spectacle": {
+      const distance = include("distance") ? `D: RE ${eye(rx.rightEyeDistance)} | LE ${eye(rx.leftEyeDistance)}` : "";
+      const near = include("near") ? `N: RE ${eye(rx.rightEyeNear)} | LE ${eye(rx.leftEyeNear)}` : "";
+      const ipd = include("ipd") && (rx.ipd || rx.nearIPD)
+        ? `IPD: ${rx.ipd || "—"}${rx.nearIPD ? ` / Near ${rx.nearIPD}` : ""}`
+        : "";
       return [
-        `D: RE ${eye(rx.rightEyeDistance)} | LE ${eye(rx.leftEyeDistance)}`,
-        `N: RE ${eye(rx.rightEyeNear)} | LE ${eye(rx.leftEyeNear)}`,
-        rx.ipd && `IPD: ${rx.ipd}${rx.nearIPD ? ` / Near ${rx.nearIPD}` : ""}`,
+        distance,
+        near,
+        ipd,
       ].filter(Boolean).join("\n");
+    }
     case "lens":
-      return [rx.lensUsage, rx.lensType, ...(rx.lensCoating || []), rx.lensMaterial].filter(Boolean).join(" · ");
+      return [
+        include("usage") && rx.lensUsage,
+        include("type") && rx.lensType,
+        include("coating") && (rx.lensCoating || []).join(", "),
+        include("material") && rx.lensMaterial,
+      ].filter(Boolean).join(" · ");
     case "investigations":
-      return rx.investigations || "";
+      return include("investigations") ? rx.investigations || "" : "";
     case "advice":
-      return [rx.adviceBn || rx.advice, rx.adviceBn && rx.advice !== rx.adviceBn ? rx.advice : ""].filter(Boolean).join("\n");
+      return [
+        include("bengali") && rx.adviceBn,
+        include("english") && rx.advice,
+      ].filter(Boolean).join("\n");
     case "followUp":
-      return [rx.followUpBn || rx.followUp, rx.followUpBn && rx.followUp !== rx.followUpBn ? rx.followUp : ""].filter(Boolean).join("\n");
+      return [
+        include("bengali") && rx.followUpBn,
+        include("english") && rx.followUp,
+      ].filter(Boolean).join("\n");
     default:
       return "";
   }
@@ -519,7 +565,7 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
     .filter((field) => field.enabled)
     .map((field) => {
       const constrainedField = constrainRxPadOverlayField(field, width, height);
-      const value = overlayFieldValue(rx, field.id);
+      const value = overlayFieldValue(rx, field);
       if (!value.trim()) return "";
       const safeValue = esc(value).replace(/\n/g, "<br/>");
       return `<div class="overlay-field" style="left:${constrainedField.x}mm;top:${constrainedField.y}mm;width:${constrainedField.width}mm;height:${constrainedField.height}mm;font-size:${constrainedField.fontSize}pt">${safeValue}</div>`;

@@ -98,6 +98,8 @@ export interface RxPadOverlayField {
   id: string;
   label: string;
   enabled: boolean;
+  printMode?: "all" | "selected";
+  contentSelection?: string[];
   x: number;
   y: number;
   width: number;

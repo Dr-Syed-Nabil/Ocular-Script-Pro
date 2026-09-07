@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -18,7 +18,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { RxPadOverlayConfig, RxPadOverlayField } from "@/types";
-import { constrainRxPadOverlayField, constrainRxPadOverlayFields, normalizeRxPadPaperSize } from "@/utils/rxPadOverlay";
+import {
+  constrainRxPadOverlayField,
+  constrainRxPadOverlayFields,
+  getRxPadOverlayContentOptions,
+  normalizeRxPadPaperSize,
+} from "@/utils/rxPadOverlay";
 
 const PREVIEW_WIDTH = 340;
 
@@ -52,39 +57,57 @@ function OverlayFieldBox({
   onSelect: () => void;
   onChange: (patch: Partial<RxPadOverlayField>) => void;
 }) {
+  const fieldRef = React.useRef(field);
+  const onChangeRef = React.useRef(onChange);
+  const scaleRef = React.useRef(scale);
+  const paperWidthRef = React.useRef(paperWidth);
+  const paperHeightRef = React.useRef(paperHeight);
   const dragStart = React.useRef({ x: field.x, y: field.y });
   const resizeStart = React.useRef({ width: field.width, height: field.height });
-  const panResponder = useMemo(() => PanResponder.create({
+  const interactionMode = React.useRef<"move" | "resize">("move");
+  fieldRef.current = field;
+  onChangeRef.current = onChange;
+  scaleRef.current = scale;
+  paperWidthRef.current = paperWidth;
+  paperHeightRef.current = paperHeight;
+
+  const panResponder = React.useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => {
-      dragStart.current = { x: field.x, y: field.y };
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
+    onPanResponderGrant: (event) => {
+      const current = fieldRef.current;
+      const handleSize = 30;
+      const { locationX, locationY } = event.nativeEvent;
+      interactionMode.current = locationX >= current.width * scaleRef.current - handleSize
+        && locationY >= current.height * scaleRef.current - handleSize
+        ? "resize"
+        : "move";
+      dragStart.current = { x: current.x, y: current.y };
+      resizeStart.current = { width: current.width, height: current.height };
+      onSelect();
     },
     onPanResponderMove: (_, gesture) => {
-      onChange({
-        x: clamp(dragStart.current.x + gesture.dx / scale, 0, Math.max(0, paperWidth - field.width)),
-        y: clamp(dragStart.current.y + gesture.dy / scale, 0, Math.max(0, paperHeight - field.height)),
-      });
+      const current = fieldRef.current;
+      const currentScale = scaleRef.current;
+      if (interactionMode.current === "resize") {
+        onChangeRef.current({
+          width: clamp(resizeStart.current.width + gesture.dx / currentScale, 5, paperWidthRef.current - current.x),
+          height: clamp(resizeStart.current.height + gesture.dy / currentScale, 4, paperHeightRef.current - current.y),
+        });
+      } else {
+        onChangeRef.current({
+          x: clamp(dragStart.current.x + gesture.dx / currentScale, 0, Math.max(0, paperWidthRef.current - current.width)),
+          y: clamp(dragStart.current.y + gesture.dy / currentScale, 0, Math.max(0, paperHeightRef.current - current.height)),
+        });
+      }
     },
-  }), [field, onChange, paperHeight, paperWidth, scale]);
-  const resizeResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => {
-      resizeStart.current = { width: field.width, height: field.height };
-    },
-    onPanResponderMove: (_, gesture) => {
-      onChange({
-        width: clamp(resizeStart.current.width + gesture.dx / scale, 5, paperWidth - field.x),
-        height: clamp(resizeStart.current.height + gesture.dy / scale, 4, paperHeight - field.y),
-      });
-    },
-  }), [field, onChange, paperHeight, paperWidth, scale]);
+  })).current;
 
   return (
     <View
       {...panResponder.panHandlers}
-      onTouchStart={onSelect}
       style={{
         position: "absolute",
         left: field.x * scale,
@@ -102,15 +125,14 @@ function OverlayFieldBox({
       </Text>
       {selected ? (
         <View
-          {...resizeResponder.panHandlers}
           accessibilityLabel={`Resize ${field.label}`}
           style={{
             position: "absolute",
-            right: -7,
-            bottom: -7,
-            width: 18,
-            height: 18,
-            borderRadius: 9,
+            right: 2,
+            bottom: 2,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
             borderWidth: 2,
             borderColor: "#fff",
             backgroundColor: "#1A6FAB",
@@ -123,7 +145,7 @@ function OverlayFieldBox({
             elevation: 2,
           }}
         >
-          <Feather name="maximize-2" size={9} color="#fff" />
+          <Feather name="maximize-2" size={10} color="#fff" />
         </View>
       ) : null}
     </View>
@@ -176,6 +198,9 @@ export default function RxPadSettingsScreen() {
   }, [prescriptionConfig]);
 
   const selectedField = draft.fields.find((field) => field.id === selectedId) || draft.fields[0];
+  const selectedContentOptions = selectedField ? getRxPadOverlayContentOptions(selectedField.id) : [];
+  const selectedContentIds = new Set(selectedField?.contentSelection || []);
+  const selectedContentIsPartial = selectedField?.printMode === "selected";
   const previewScale = PREVIEW_WIDTH / draft.paperWidthMm;
   const previewHeight = draft.paperHeightMm * previewScale;
 
@@ -448,6 +473,50 @@ export default function RxPadSettingsScreen() {
               placeholder="Category label"
               placeholderTextColor={colors.mutedForeground}
             />
+            {selectedContentOptions.length ? (
+              <View style={[styles.contentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.contentHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.contentTitle, { color: colors.foreground }]}>Print contents</Text>
+                    <Text style={[styles.contentDescription, { color: colors.mutedForeground }]}>
+                      Print the whole category or choose only the details needed on this pad.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: !selectedContentIsPartial }}
+                    style={[styles.wholeCategoryButton, { borderColor: !selectedContentIsPartial ? colors.primary : colors.border, backgroundColor: !selectedContentIsPartial ? colors.secondary : colors.card }]}
+                    onPress={() => updateField(selectedField.id, { printMode: "all", contentSelection: undefined })}
+                  >
+                    <Feather name={!selectedContentIsPartial ? "check-square" : "square"} size={15} color={!selectedContentIsPartial ? colors.primary : colors.mutedForeground} />
+                    <Text style={{ color: !selectedContentIsPartial ? colors.primary : colors.mutedForeground, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>Whole category</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.contentOptions}>
+                  {selectedContentOptions.map((option) => {
+                    const checked = !selectedContentIsPartial || selectedContentIds.has(option.id);
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                        style={[styles.contentOption, { borderColor: checked ? colors.primary : colors.border, backgroundColor: checked ? colors.secondary : colors.card }]}
+                        onPress={() => {
+                          const current = selectedField.contentSelection || selectedContentOptions.map((item) => item.id);
+                          const next = current.includes(option.id)
+                            ? current.filter((item) => item !== option.id)
+                            : [...current, option.id];
+                          updateField(selectedField.id, { printMode: "selected", contentSelection: next });
+                        }}
+                      >
+                        <Feather name={checked ? "check-square" : "square"} size={14} color={checked ? colors.primary : colors.mutedForeground} />
+                        <Text style={{ flex: 1, color: colors.foreground, fontSize: 11, fontFamily: "Inter_500Medium" }}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
             <View style={styles.inputRow}>
               <FieldNumberInput label="Left X (mm)" value={selectedField.x} onChange={(value) => updateField(selectedField.id, { x: value })} />
               <FieldNumberInput label="Top Y (mm)" value={selectedField.y} onChange={(value) => updateField(selectedField.id, { y: value })} />
@@ -497,6 +566,13 @@ const styles = StyleSheet.create({
   noImageText: { textAlign: "center", fontSize: 12, fontFamily: "Inter_400Regular" },
   selectedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   visibilityButton: { borderWidth: 1.2, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
+  contentCard: { borderWidth: 1, borderRadius: 11, padding: 10, marginTop: 10 },
+  contentHeader: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+  contentTitle: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  contentDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
+  wholeCategoryButton: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1.2, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6 },
+  contentOptions: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 9 },
+  contentOption: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1.1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6 },
   smallAction: { borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8 },
   smallActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   templateRow: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1.2, borderRadius: 10, padding: 10 },

@@ -4,6 +4,75 @@ export const MIN_RX_PAD_PAPER_SIZE_MM = 20;
 export const MIN_RX_PAD_FIELD_WIDTH_MM = 5;
 export const MIN_RX_PAD_FIELD_HEIGHT_MM = 4;
 
+export interface RxPadOverlayContentOption {
+  id: string;
+  label: string;
+}
+
+export const RX_PAD_OVERLAY_CONTENT_OPTIONS: Record<string, RxPadOverlayContentOption[]> = {
+  patient: [
+    { id: "name", label: "Patient name" },
+    { id: "age", label: "Age" },
+    { id: "weight", label: "Weight" },
+    { id: "phone", label: "Phone" },
+    { id: "puid", label: "PUID" },
+    { id: "date", label: "Date" },
+  ],
+  chiefComplaints: [{ id: "complaints", label: "Complaints" }],
+  pastHistory: [
+    { id: "conditions", label: "Medical conditions" },
+    { id: "others", label: "Other history" },
+    { id: "notes", label: "History notes" },
+  ],
+  visualAcuity: [
+    { id: "ua", label: "Unaided (UA)" },
+    { id: "wa", label: "With glasses (WA)" },
+    { id: "ph", label: "Pinhole (PH)" },
+    { id: "bcva", label: "Best corrected (BCVA)" },
+  ],
+  examination: [
+    { id: "adnexa", label: "Adnexa" },
+    { id: "anteriorSegment", label: "Anterior segment" },
+    { id: "posteriorSegment", label: "Posterior segment" },
+  ],
+  gat: [
+    { id: "right", label: "Right eye (RE)" },
+    { id: "left", label: "Left eye (LE)" },
+  ],
+  diagnosis: [{ id: "diagnosis", label: "Diagnosis" }],
+  drugs: [
+    { id: "name", label: "Medicine name" },
+    { id: "route", label: "Route" },
+    { id: "schedule", label: "Dose and schedule" },
+    { id: "duration", label: "Duration" },
+    { id: "notes", label: "Notes" },
+  ],
+  spectacle: [
+    { id: "distance", label: "Distance correction" },
+    { id: "near", label: "Near correction" },
+    { id: "ipd", label: "IPD" },
+  ],
+  lens: [
+    { id: "usage", label: "Usage" },
+    { id: "type", label: "Type" },
+    { id: "coating", label: "Coating" },
+    { id: "material", label: "Material" },
+  ],
+  investigations: [{ id: "investigations", label: "Investigations" }],
+  advice: [
+    { id: "english", label: "English advice" },
+    { id: "bengali", label: "Bengali advice" },
+  ],
+  followUp: [
+    { id: "english", label: "English follow-up" },
+    { id: "bengali", label: "Bengali follow-up" },
+  ],
+};
+
+export function getRxPadOverlayContentOptions(id: string): RxPadOverlayContentOption[] {
+  return RX_PAD_OVERLAY_CONTENT_OPTIONS[id] || [];
+}
+
 function finiteOr(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
