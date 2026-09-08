@@ -6,6 +6,7 @@ import {
   RxPadOverlayField,
 } from "@/types";
 import {
+  constrainRxPadOverlayContentField,
   constrainRxPadOverlayField,
   normalizeRxPadImageFit,
   normalizeRxPadImagePosition,
@@ -198,18 +199,49 @@ function cleanOptions(value: unknown, fallback: string[]): string[] {
 
 const DEFAULT_RX_PAD_OVERLAY = DEFAULT_PRESCRIPTION_CONFIG.rxPadOverlay as RxPadOverlayConfig;
 
-function normalizeOverlayField(fallback: RxPadOverlayField, savedValue: unknown): RxPadOverlayField {
+function normalizeOverlayField(
+  fallback: RxPadOverlayField,
+  savedValue: unknown,
+  paperWidthMm: number,
+  paperHeightMm: number,
+): RxPadOverlayField {
   const saved = savedValue && typeof savedValue === "object" ? savedValue as Partial<RxPadOverlayField> : {};
+  const savedContentFields = (saved as { contentFields?: unknown }).contentFields;
   const numberOr = (value: unknown, fallbackValue: number) =>
     typeof value === "number" && Number.isFinite(value) ? value : fallbackValue;
+  const contentFields = Array.isArray(savedContentFields)
+    ? savedContentFields
+      .filter((item) => Boolean(item && typeof item === "object"))
+      .map((item, index) => {
+        const candidate = item as Record<string, unknown>;
+        return constrainRxPadOverlayContentField({
+          id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : `content-${index + 1}`,
+          label: typeof candidate.label === "string" && candidate.label.trim() ? candidate.label : `Content ${index + 1}`,
+          enabled: candidate.enabled !== false,
+          x: numberOr(candidate.x, fallback.x),
+          y: numberOr(candidate.y, fallback.y),
+          width: Math.max(5, numberOr(candidate.width, fallback.width)),
+          height: Math.max(4, numberOr(candidate.height, fallback.height)),
+          fontSize: Math.max(5, Math.min(48, numberOr(candidate.fontSize, fallback.fontSize))),
+          color: typeof candidate.color === "string" && candidate.color.trim() ? candidate.color : undefined,
+        }, paperWidthMm, paperHeightMm);
+      })
+    : fallback.contentFields;
   return {
     ...fallback,
     label: typeof saved.label === "string" && saved.label.trim() ? saved.label.trim() : fallback.label,
     enabled: saved.enabled !== false,
+    ...(typeof saved.showCategoryLabel === "boolean" || typeof fallback.showCategoryLabel === "boolean"
+      ? { showCategoryLabel: typeof saved.showCategoryLabel === "boolean" ? saved.showCategoryLabel : fallback.showCategoryLabel }
+      : {}),
+    ...(typeof saved.showContentLabels === "boolean" || typeof fallback.showContentLabels === "boolean"
+      ? { showContentLabels: typeof saved.showContentLabels === "boolean" ? saved.showContentLabels : fallback.showContentLabels }
+      : {}),
     printMode: saved.printMode === "selected" ? "selected" : "all",
     contentSelection: saved.printMode === "selected" && Array.isArray(saved.contentSelection)
       ? saved.contentSelection.filter((item): item is string => typeof item === "string")
       : undefined,
+    ...(contentFields ? { contentFields } : {}),
     x: Math.max(0, numberOr(saved.x, fallback.x)),
     y: Math.max(0, numberOr(saved.y, fallback.y)),
     width: Math.max(5, numberOr(saved.width, fallback.width)),
@@ -230,7 +262,7 @@ function normalizeRxPadOverlay(value: unknown, fallbackId = "rx-pad", fallbackNa
   );
   const fields = DEFAULT_RX_PAD_OVERLAY.fields.map((fallback) => {
     const savedField = Array.isArray(saved.fields) ? saved.fields.find((item) => item?.id === fallback.id) : undefined;
-    return constrainRxPadOverlayField(normalizeOverlayField(fallback, savedField), paperWidthMm, paperHeightMm);
+    return constrainRxPadOverlayField(normalizeOverlayField(fallback, savedField, paperWidthMm, paperHeightMm), paperWidthMm, paperHeightMm);
   });
   return {
     id: typeof saved.id === "string" && saved.id.trim() ? saved.id.trim() : fallbackId,

@@ -8,6 +8,7 @@ import test from "node:test";
 import { normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
 import {
   constrainRxPadOverlayField,
+  createRxPadOverlayContentFields,
   getRxPadImageBackgroundPosition,
   getRxPadImageRenderGeometry,
   MIN_RX_PAD_FIELD_HEIGHT_MM,
@@ -168,6 +169,47 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
       contentSelection: undefined,
     },
   );
+});
+
+test("keeps saved individual content geometry and label preferences after reopening", () => {
+  const savedConfig = {
+    version: 8,
+    activeRxPadOverlayId: "custom-pad",
+    rxPadOverlays: [{
+      id: "custom-pad",
+      name: "Custom pad",
+      paperWidthMm: 100,
+      paperHeightMm: 80,
+      fields: [{
+        ...field,
+        showCategoryLabel: false,
+        showContentLabels: false,
+        contentFields: [{
+          id: "name",
+          label: "Patient name",
+          enabled: true,
+          x: 96,
+          y: 78,
+          width: 20,
+          height: 10,
+          fontSize: 9,
+          color: "#1A6FAB",
+        }],
+      }],
+    }],
+  };
+
+  const reopened = normalizePrescriptionConfig(JSON.parse(JSON.stringify(savedConfig)));
+  const reopenedField = reopened.rxPadOverlays?.[0]?.fields.find((candidate) => candidate.id === "patient");
+  const reopenedContent = reopenedField?.contentFields?.[0];
+
+  assert.equal(reopenedField?.showCategoryLabel, false);
+  assert.equal(reopenedField?.showContentLabels, false);
+  assert.equal(reopenedContent?.x, 80);
+  assert.equal(reopenedContent?.y, 70);
+  assert.equal(reopenedContent?.width, 20);
+  assert.equal(reopenedContent?.height, 10);
+  assert.equal(reopenedContent?.color, "#1A6FAB");
 });
 
 test("keeps the selected duplicate overlay active while assigning unique IDs", () => {
@@ -508,4 +550,43 @@ test("keeps overlay HTML output unchanged when a field has printable content", (
 
   assert.match(html, /class="overlay-field"/);
   assert.match(html, />Cataract<\/div>/);
+});
+
+test("prints independently positioned content boxes without category or content labels when omitted", () => {
+  const individualField = {
+    ...field,
+    id: "patient",
+    showCategoryLabel: false,
+    showContentLabels: false,
+    contentFields: [
+      { id: "name", label: "Name", enabled: true, x: 5, y: 6, width: 25, height: 6, fontSize: 9, color: "#1A6FAB" },
+      { id: "age", label: "Age", enabled: true, x: 40, y: 16, width: 15, height: 6, fontSize: 8, color: "#A449D5" },
+    ],
+  };
+  const html = generateRxPadOverlayHTML(
+    { ...emptyPrescription, patientName: "Mina", patientAge: "42" },
+    { id: "custom-pad", name: "Custom pad", paperWidthMm: 100, paperHeightMm: 80, fields: [individualField] },
+  );
+
+  assert.equal((html.match(/class="overlay-content-field"/g) || []).length, 2);
+  assert.match(html, /left:5mm;top:6mm;width:25mm;height:6mm[^>]*>Mina<\/div>/);
+  assert.match(html, /left:40mm;top:16mm;width:15mm;height:6mm[^>]*>42<\/div>/);
+  assert.doesNotMatch(html, /Patient particulars|Name:|Age:/);
+});
+
+test("creates colored child boxes inside the category bounds", () => {
+  const contentFields = createRxPadOverlayContentFields({
+    ...field,
+    id: "patient",
+    showCategoryLabel: true,
+    x: 10,
+    y: 20,
+    width: 40,
+    height: 30,
+  });
+
+  assert.equal(contentFields.length, 6);
+  assert.equal(contentFields[0].y, 25);
+  assert.ok(contentFields.every((contentField) => contentField.color?.startsWith("#")));
+  assert.ok(contentFields.every((contentField) => contentField.x >= 10 && contentField.x + contentField.width <= 50));
 });

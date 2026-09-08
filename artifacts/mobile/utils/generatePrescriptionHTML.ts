@@ -1,5 +1,6 @@
-import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig, RxPadOverlayField } from "@/types";
+import { DoctorProfile, Drug, EyeSpectacleRx, EyeVA, PastHistory, Prescription, RxPadOverlayConfig, RxPadOverlayContentField, RxPadOverlayField } from "@/types";
 import {
+  constrainRxPadOverlayContentField,
   constrainRxPadOverlayField,
   getRxPadImageBackgroundPosition,
   normalizeRxPadImageFit,
@@ -103,7 +104,82 @@ function customSectionsHTML(rx: Prescription): string {
     .join("");
 }
 
+export function getRxPadOverlayContentValue(rx: Prescription, field: RxPadOverlayField, contentId: string): string {
+  const eye = (value: EyeSpectacleRx) => [value.dsp, value.dcyl, value.axis, value.va].filter(Boolean).join(" / ");
+  const correctionLine = (right: EyeSpectacleRx, left: EyeSpectacleRx) => {
+    const rightValue = eye(right);
+    const leftValue = eye(left);
+    return rightValue || leftValue ? `RE ${rightValue || "—"} | LE ${leftValue || "—"}` : "";
+  };
+  switch (`${field.id}:${contentId}`) {
+    case "patient:name": return rx.patientName || "";
+    case "patient:age": return rx.patientAge || "";
+    case "patient:weight": return rx.patientWeight || "";
+    case "patient:phone": return rx.patientPhone || "";
+    case "patient:puid": return rx.patientPuid || "";
+    case "patient:date": return formatDate(rx.date);
+    case "chiefComplaints:complaints": return rx.chiefComplaints || "";
+    case "pastHistory:conditions":
+      return [
+        rx.pastHistory?.dm && "DM", rx.pastHistory?.htn && "HTN", rx.pastHistory?.ihd && "IHD",
+        rx.pastHistory?.ckd && "CKD", rx.pastHistory?.ba && "BA", rx.pastHistory?.thyDs && "Thyroid Ds",
+        rx.pastHistory?.uromax && "Uromax",
+      ].filter(Boolean).join(" / ");
+    case "pastHistory:others": return rx.pastHistory?.others || "";
+    case "pastHistory:notes": return rx.pastHistoryNotes || "";
+    case "visualAcuity:ua": return `RE ${rx.rightEyeVA?.ua || "—"} | LE ${rx.leftEyeVA?.ua || "—"}`;
+    case "visualAcuity:wa": return `RE ${rx.rightEyeVA?.wa || "—"} | LE ${rx.leftEyeVA?.wa || "—"}`;
+    case "visualAcuity:ph": return `RE ${rx.rightEyeVA?.ph || "—"} | LE ${rx.leftEyeVA?.ph || "—"}`;
+    case "visualAcuity:bcva": return `RE ${rx.rightEyeVA?.bcva || "—"} | LE ${rx.leftEyeVA?.bcva || "—"}`;
+    case "examination:adnexa": return rx.adnexa || "";
+    case "examination:anteriorSegment": return rx.anteriorSegment || "";
+    case "examination:posteriorSegment": return rx.posteriorSegment || "";
+    case "gat:right": return rx.gatRight || "";
+    case "gat:left": return rx.gatLeft || "";
+    case "diagnosis:diagnosis": return rx.diagnosis || "";
+    case "drugs:name": return (rx.drugs || []).filter((drug) => drug.name.trim()).map((drug) => drug.name).join("\n");
+    case "drugs:route": return (rx.drugs || []).filter((drug) => drug.name.trim() && drug.route).map((drug) => drug.route).join("\n");
+    case "drugs:schedule": return (rx.drugs || []).filter((drug) => drug.name.trim()).map((drug) =>
+      drug.dosePhases?.length
+        ? drug.dosePhases.map((phase, index) => `${index && phase.connector ? `${phase.connector}, ` : ""}${phase.schedule}`).join(" ")
+        : drug.scheduleBn || drug.schedule
+    ).join("\n");
+    case "drugs:duration": return (rx.drugs || []).filter((drug) => drug.name.trim()).map((drug) =>
+      drug.dosePhases?.length
+        ? drug.dosePhases.map((phase) => `${phase.durationValue} ${phase.durationUnit}`).join(" ")
+        : drug.durationBn || drug.duration
+    ).join("\n");
+    case "drugs:notes": return (rx.drugs || []).filter((drug) => drug.name.trim() && drug.notes).map((drug) => drug.notes).join("\n");
+    case "spectacle:distance": return correctionLine(rx.rightEyeDistance, rx.leftEyeDistance);
+    case "spectacle:near": return correctionLine(rx.rightEyeNear, rx.leftEyeNear);
+    case "spectacle:ipd": return rx.ipd || rx.nearIPD ? `${rx.ipd || "—"}${rx.nearIPD ? ` / Near ${rx.nearIPD}` : ""}` : "";
+    case "lens:usage": return rx.lensUsage || "";
+    case "lens:type": return rx.lensType || "";
+    case "lens:coating": return (rx.lensCoating || []).join(", ");
+    case "lens:material": return rx.lensMaterial || "";
+    case "investigations:investigations": return rx.investigations || "";
+    case "advice:english": return rx.advice || "";
+    case "advice:bengali": return rx.adviceBn || "";
+    case "followUp:english": return rx.followUp || "";
+    case "followUp:bengali": return rx.followUpBn || "";
+    default: return "";
+  }
+}
+
+function contentFieldValue(rx: Prescription, field: RxPadOverlayField, contentField: RxPadOverlayContentField): string {
+  const value = getRxPadOverlayContentValue(rx, field, contentField.id);
+  if (!value.trim()) return "";
+  return field.showContentLabels === false ? value : `${contentField.label}: ${value}`;
+}
+
 export function getRxPadOverlayFieldValue(rx: Prescription, field: RxPadOverlayField): string {
+  if (field.contentFields?.length) {
+    return field.contentFields
+      .filter((contentField) => contentField.enabled && (field.printMode !== "selected" || field.contentSelection?.includes(contentField.id)))
+      .map((contentField) => contentFieldValue(rx, field, contentField))
+      .filter(Boolean)
+      .join("\n");
+  }
   const { id } = field;
   const include = (contentId: string) =>
     field.printMode !== "selected" || Boolean(field.contentSelection?.includes(contentId));
@@ -622,10 +698,27 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
     .filter((field) => field.enabled)
     .map((field) => {
       const constrainedField = constrainRxPadOverlayField(field, width, height);
+      const categoryLabel = field.showCategoryLabel ? `${esc(field.label)}: ` : "";
+      if (field.contentFields?.length) {
+        const childFields = field.contentFields
+          .filter((contentField) => contentField.enabled && (field.printMode !== "selected" || field.contentSelection?.includes(contentField.id)))
+          .map((contentField) => {
+            const constrainedContentField = constrainRxPadOverlayContentField(contentField, width, height);
+            const value = contentFieldValue(rx, field, contentField);
+            if (!value.trim()) return "";
+            const safeValue = esc(value).replace(/\n/g, "<br/>");
+            return `<div class="overlay-content-field" style="left:${constrainedContentField.x}mm;top:${constrainedContentField.y}mm;width:${constrainedContentField.width}mm;height:${constrainedContentField.height}mm;font-size:${constrainedContentField.fontSize}pt">${safeValue}</div>`;
+          })
+          .join("");
+        const labelMarkup = field.showCategoryLabel
+          ? `<div class="overlay-category-label" style="left:${constrainedField.x}mm;top:${constrainedField.y}mm;width:${constrainedField.width}mm;font-size:${constrainedField.fontSize}pt">${categoryLabel.slice(0, -2)}</div>`
+          : "";
+        return `${labelMarkup}${childFields}`;
+      }
       const value = getRxPadOverlayFieldValue(rx, field);
       if (!value.trim()) return "";
       const safeValue = esc(value).replace(/\n/g, "<br/>");
-      return `<div class="overlay-field" style="left:${constrainedField.x}mm;top:${constrainedField.y}mm;width:${constrainedField.width}mm;height:${constrainedField.height}mm;font-size:${constrainedField.fontSize}pt">${safeValue}</div>`;
+      return `<div class="overlay-field" style="left:${constrainedField.x}mm;top:${constrainedField.y}mm;width:${constrainedField.width}mm;height:${constrainedField.height}mm;font-size:${constrainedField.fontSize}pt">${categoryLabel}${safeValue}</div>`;
     })
     .join("");
   return `<!DOCTYPE html>
@@ -640,7 +733,8 @@ export function generateRxPadOverlayHTML(rx: Prescription, overlay: RxPadOverlay
   html, body { width: ${width}mm; height: ${height}mm; margin: 0; padding: 0; overflow: hidden; }
   body { font-family: 'Roboto', 'Noto Sans Bengali', Arial, sans-serif; background: transparent; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
    .page { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; background-color: #fff; background-image: url("${imageUri.replace(/"/g, "&quot;")}"); background-position: ${imageBackgroundPosition}; background-size: ${imageBackgroundSize}; background-repeat: no-repeat; }
-  .overlay-field { position: absolute; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.22; font-weight: 500; color: #111; }
+  .overlay-field, .overlay-content-field, .overlay-category-label { position: absolute; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.22; font-weight: 500; color: #111; }
+  .overlay-category-label { height: 5mm; font-weight: 700; }
 </style>
 </head>
 <body><div class="page">${fields}</div></body>

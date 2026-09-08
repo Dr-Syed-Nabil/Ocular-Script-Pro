@@ -17,12 +17,16 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
-import { RxPadImageFit, RxPadOverlayConfig, RxPadOverlayField } from "@/types";
+import { RxPadImageFit, RxPadOverlayConfig, RxPadOverlayContentField, RxPadOverlayField } from "@/types";
 import {
+  constrainRxPadOverlayContentField,
   constrainRxPadOverlayField,
   constrainRxPadOverlayFields,
+  createRxPadOverlayContentFields,
   getRxPadImageRenderGeometry,
   getRxPadImageResizeMode,
+  getRxPadOverlayContentColor,
+  getRxPadOverlayFieldColor,
   getRxPadOverlayContentOptions,
   normalizeRxPadImageFit,
   normalizeRxPadImagePosition,
@@ -56,6 +60,7 @@ function OverlayFieldBox({
   paperWidth,
   paperHeight,
   selected,
+  color,
   onSelect,
   onChange,
 }: {
@@ -64,6 +69,7 @@ function OverlayFieldBox({
   paperWidth: number;
   paperHeight: number;
   selected: boolean;
+  color: string;
   onSelect: () => void;
   onChange: (patch: Partial<RxPadOverlayField>) => void;
 }) {
@@ -125,12 +131,12 @@ function OverlayFieldBox({
         width: field.width * scale,
         height: field.height * scale,
         borderWidth: selected ? 1.5 : 1,
-        borderColor: selected ? "#1A6FAB" : "rgba(26,111,171,0.55)",
-        backgroundColor: selected ? "rgba(238,243,250,0.6)" : "rgba(255,255,255,0.18)",
+        borderColor: selected ? color : `${color}99`,
+        backgroundColor: selected ? `${color}18` : "rgba(255,255,255,0.18)",
         padding: 2,
       }}
     >
-      <Text numberOfLines={2} style={{ color: "#1A6FAB", fontSize: Math.max(7, field.fontSize * scale * 0.8), fontWeight: "700" }}>
+        <Text numberOfLines={2} style={{ color, fontSize: Math.max(7, field.fontSize * scale * 0.8), fontWeight: "700" }}>
         {field.label}
       </Text>
       {selected ? (
@@ -145,13 +151,124 @@ function OverlayFieldBox({
             borderRadius: 11,
             borderWidth: 2,
             borderColor: "#fff",
-            backgroundColor: "#1A6FAB",
+            backgroundColor: color,
             alignItems: "center",
             justifyContent: "center",
             shadowColor: "#102C3D",
             shadowOpacity: 0.2,
             shadowRadius: 3,
             shadowOffset: { width: 0, height: 1 },
+            elevation: 2,
+          }}
+        >
+          <Feather name="maximize-2" size={10} color="#fff" />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function OverlayContentFieldBox({
+  field,
+  scale,
+  paperWidth,
+  paperHeight,
+  selected,
+  color,
+  onSelect,
+  onChange,
+}: {
+  field: RxPadOverlayContentField;
+  scale: number;
+  paperWidth: number;
+  paperHeight: number;
+  selected: boolean;
+  color: string;
+  onSelect: () => void;
+  onChange: (patch: Partial<RxPadOverlayContentField>) => void;
+}) {
+  const fieldRef = React.useRef(field);
+  const onChangeRef = React.useRef(onChange);
+  const scaleRef = React.useRef(scale);
+  const paperWidthRef = React.useRef(paperWidth);
+  const paperHeightRef = React.useRef(paperHeight);
+  const dragStart = React.useRef({ x: field.x, y: field.y });
+  const resizeStart = React.useRef({ width: field.width, height: field.height });
+  const interactionMode = React.useRef<"move" | "resize">("move");
+  fieldRef.current = field;
+  onChangeRef.current = onChange;
+  scaleRef.current = scale;
+  paperWidthRef.current = paperWidth;
+  paperHeightRef.current = paperHeight;
+
+  const panResponder = React.useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
+    onPanResponderGrant: (event) => {
+      const current = fieldRef.current;
+      const handleSize = 30;
+      const { locationX, locationY } = event.nativeEvent;
+      interactionMode.current = locationX >= current.width * scaleRef.current - handleSize
+        && locationY >= current.height * scaleRef.current - handleSize
+        ? "resize"
+        : "move";
+      dragStart.current = { x: current.x, y: current.y };
+      resizeStart.current = { width: current.width, height: current.height };
+      onSelect();
+    },
+    onPanResponderMove: (_, gesture) => {
+      const current = fieldRef.current;
+      const currentScale = scaleRef.current;
+      if (interactionMode.current === "resize") {
+        onChangeRef.current({
+          width: clamp(resizeStart.current.width + gesture.dx / currentScale, 5, paperWidthRef.current - current.x),
+          height: clamp(resizeStart.current.height + gesture.dy / currentScale, 4, paperHeightRef.current - current.y),
+        });
+      } else {
+        onChangeRef.current({
+          x: clamp(dragStart.current.x + gesture.dx / currentScale, 0, Math.max(0, paperWidthRef.current - current.width)),
+          y: clamp(dragStart.current.y + gesture.dy / currentScale, 0, Math.max(0, paperHeightRef.current - current.height)),
+        });
+      }
+    },
+  })).current;
+
+  return (
+    <View
+      {...panResponder.panHandlers}
+      style={{
+        position: "absolute",
+        left: field.x * scale,
+        top: field.y * scale,
+        width: field.width * scale,
+        height: field.height * scale,
+        borderWidth: selected ? 1.5 : 1,
+        borderColor: selected ? color : `${color}99`,
+        backgroundColor: selected ? `${color}22` : `${color}0D`,
+        padding: 2,
+        zIndex: selected ? 3 : 2,
+      }}
+    >
+      <Text numberOfLines={2} style={{ color, fontSize: Math.max(7, field.fontSize * scale * 0.8), fontWeight: "700" }}>
+        {field.label}
+      </Text>
+      {selected ? (
+        <View
+          accessibilityLabel={`Resize ${field.label}`}
+          style={{
+            position: "absolute",
+            right: 2,
+            bottom: 2,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            borderWidth: 2,
+            borderColor: "#fff",
+            backgroundColor: color,
+            alignItems: "center",
+            justifyContent: "center",
             elevation: 2,
           }}
         >
@@ -249,6 +366,7 @@ export default function RxPadSettingsScreen() {
   const [draft, setDraft] = useState<RxPadOverlayConfig>(initialOverlays.find((overlay) => overlay.id === initialSelectedId) || initialOverlays[0]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialSelectedId);
   const [selectedId, setSelectedId] = useState("patient");
+  const [selectedContentId, setSelectedContentId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -264,6 +382,7 @@ export default function RxPadSettingsScreen() {
   const selectedContentOptions = selectedField ? getRxPadOverlayContentOptions(selectedField.id) : [];
   const selectedContentIds = new Set(selectedField?.contentSelection || []);
   const selectedContentIsPartial = selectedField?.printMode === "selected";
+  const selectedContentField = selectedField?.contentFields?.find((field) => field.id === selectedContentId);
   const printableFields = currentPrescription
     ? draft.fields.filter((field) => field.enabled && getRxPadOverlayFieldValue(currentPrescription, field).trim().length > 0)
     : [];
@@ -297,6 +416,33 @@ export default function RxPadSettingsScreen() {
     }));
   };
 
+  const updateContentField = (categoryId: string, contentId: string, patch: Partial<RxPadOverlayContentField>) => {
+    setDraft((current) => ({
+      ...current,
+      fields: current.fields.map((field) => field.id === categoryId
+        ? {
+          ...field,
+          contentFields: field.contentFields?.map((contentField) => contentField.id === contentId
+            ? constrainRxPadOverlayContentField({ ...contentField, ...patch }, current.paperWidthMm, current.paperHeightMm)
+            : contentField),
+        }
+        : field),
+    }));
+  };
+
+  const startIndividualContentEditing = () => {
+    if (!selectedField) return;
+    const contentFields = createRxPadOverlayContentFields(
+      selectedField,
+      selectedField.printMode === "selected" ? selectedField.contentSelection : undefined,
+    );
+    updateField(selectedField.id, {
+      contentFields,
+      showContentLabels: selectedField.showContentLabels !== false,
+    });
+    setSelectedContentId(contentFields[0]?.id);
+  };
+
   const updatePaperSize = (dimension: "paperWidthMm" | "paperHeightMm", value: number) => {
     setDraft((current) => {
       const next = {
@@ -318,6 +464,7 @@ export default function RxPadSettingsScreen() {
     setSelectedTemplateId(id);
     setDraft(next);
     setSelectedId("patient");
+    setSelectedContentId(undefined);
   };
 
   const addTemplate = () => {
@@ -336,6 +483,7 @@ export default function RxPadSettingsScreen() {
     setSelectedTemplateId(id);
     setDraft(next);
     setSelectedId("patient");
+    setSelectedContentId(undefined);
   };
 
   const deleteTemplate = () => {
@@ -355,6 +503,7 @@ export default function RxPadSettingsScreen() {
           setSelectedTemplateId(next.id);
           setDraft(next);
           setSelectedId("patient");
+          setSelectedContentId(undefined);
         },
       },
     ]);
@@ -640,16 +789,37 @@ export default function RxPadSettingsScreen() {
               </View>
             )}
             {draft.fields.filter((field) => field.enabled).map((field) => (
-              <OverlayFieldBox
-                key={field.id}
-                field={field}
-                scale={previewScale}
-                paperWidth={draft.paperWidthMm}
-                paperHeight={draft.paperHeightMm}
-                selected={field.id === selectedId}
-                onSelect={() => setSelectedId(field.id)}
-                onChange={(patch) => updateField(field.id, patch)}
-              />
+              <React.Fragment key={field.id}>
+                <OverlayFieldBox
+                  field={field}
+                  scale={previewScale}
+                  paperWidth={draft.paperWidthMm}
+                  paperHeight={draft.paperHeightMm}
+                  selected={field.id === selectedId && !selectedContentId}
+                  color={getRxPadOverlayFieldColor(field.id)}
+                  onSelect={() => {
+                    setSelectedId(field.id);
+                    setSelectedContentId(undefined);
+                  }}
+                  onChange={(patch) => updateField(field.id, patch)}
+                />
+                {field.contentFields?.filter((contentField) => contentField.enabled).map((contentField) => (
+                  <OverlayContentFieldBox
+                    key={`${field.id}:${contentField.id}`}
+                    field={contentField}
+                    scale={previewScale}
+                    paperWidth={draft.paperWidthMm}
+                    paperHeight={draft.paperHeightMm}
+                    selected={field.id === selectedId && contentField.id === selectedContentId}
+                    color={contentField.color || getRxPadOverlayContentColor(field.id, contentField.id)}
+                    onSelect={() => {
+                      setSelectedId(field.id);
+                      setSelectedContentId(contentField.id);
+                    }}
+                    onChange={(patch) => updateContentField(field.id, contentField.id, patch)}
+                  />
+                ))}
+              </React.Fragment>
             ))}
           </View>
         </View>
@@ -658,7 +828,7 @@ export default function RxPadSettingsScreen() {
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.selectedHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.foreground }]}>Edit category</Text>
+                <Text style={[styles.cardTitle, { color: colors.foreground }]}>{selectedContentField ? "Edit content box" : "Edit category"}</Text>
                 {currentPrescription ? (
                   <Text style={[styles.fieldReadiness, { color: selectedFieldIsPrintable ? colors.success : colors.mutedForeground }]}>
                     {selectedFieldIsPrintable ? "Has printable content" : "No printable content"}
@@ -679,6 +849,26 @@ export default function RxPadSettingsScreen() {
               placeholder="Category label"
               placeholderTextColor={colors.mutedForeground}
             />
+            <View style={styles.editorOptions}>
+              <TouchableOpacity
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selectedField.showCategoryLabel === true }}
+                style={[styles.editorOption, { borderColor: selectedField.showCategoryLabel === true ? colors.primary : colors.border, backgroundColor: selectedField.showCategoryLabel === true ? colors.secondary : colors.surface }]}
+                onPress={() => updateField(selectedField.id, { showCategoryLabel: selectedField.showCategoryLabel !== true })}
+              >
+                <Feather name={selectedField.showCategoryLabel === true ? "check-square" : "square"} size={14} color={selectedField.showCategoryLabel === true ? colors.primary : colors.mutedForeground} />
+                <Text style={{ color: colors.foreground, fontSize: 11, fontFamily: "Inter_500Medium" }}>Print category label</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selectedField.showContentLabels !== false }}
+                style={[styles.editorOption, { borderColor: selectedField.showContentLabels !== false ? colors.primary : colors.border, backgroundColor: selectedField.showContentLabels !== false ? colors.secondary : colors.surface }]}
+                onPress={() => updateField(selectedField.id, { showContentLabels: selectedField.showContentLabels === false })}
+              >
+                <Feather name={selectedField.showContentLabels !== false ? "check-square" : "square"} size={14} color={selectedField.showContentLabels !== false ? colors.primary : colors.mutedForeground} />
+                <Text style={{ color: colors.foreground, fontSize: 11, fontFamily: "Inter_500Medium" }}>Print content labels</Text>
+              </TouchableOpacity>
+            </View>
             {selectedContentOptions.length ? (
               <View style={[styles.contentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.contentHeader}>
@@ -706,13 +896,19 @@ export default function RxPadSettingsScreen() {
                         key={option.id}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked }}
-                        style={[styles.contentOption, { borderColor: checked ? colors.primary : colors.border, backgroundColor: checked ? colors.secondary : colors.card }]}
+                        style={[styles.contentOption, { borderColor: checked ? getRxPadOverlayContentColor(selectedField.id, option.id) : colors.border, backgroundColor: checked ? colors.secondary : colors.card }]}
                         onPress={() => {
                           const current = selectedField.contentSelection || selectedContentOptions.map((item) => item.id);
                           const next = current.includes(option.id)
                             ? current.filter((item) => item !== option.id)
                             : [...current, option.id];
-                          updateField(selectedField.id, { printMode: "selected", contentSelection: next });
+                          updateField(selectedField.id, {
+                            printMode: "selected",
+                            contentSelection: next,
+                            contentFields: selectedField.contentFields?.map((contentField) => contentField.id === option.id
+                              ? { ...contentField, enabled: next.includes(option.id) }
+                              : contentField),
+                          });
                         }}
                       >
                         <Feather name={checked ? "check-square" : "square"} size={14} color={checked ? colors.primary : colors.mutedForeground} />
@@ -720,6 +916,51 @@ export default function RxPadSettingsScreen() {
                       </TouchableOpacity>
                     );
                   })}
+                </View>
+                <TouchableOpacity
+                  style={[styles.individualEditingButton, { borderColor: colors.primary, backgroundColor: colors.secondary }]}
+                  onPress={() => {
+                    if (selectedField.contentFields?.length) {
+                      updateField(selectedField.id, { contentFields: undefined });
+                      setSelectedContentId(undefined);
+                    } else {
+                      startIndividualContentEditing();
+                    }
+                  }}
+                >
+                  <Feather name={selectedField.contentFields?.length ? "layers" : "grid"} size={14} color={colors.primary} />
+                  <Text style={[styles.individualEditingText, { color: colors.primary }]}>
+                    {selectedField.contentFields?.length ? "Use one category box" : "Edit each content separately"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {selectedContentField ? (
+              <View style={[styles.contentEditCard, { backgroundColor: colors.surface, borderColor: selectedContentField.color || colors.primary }]}>
+                <View style={styles.selectedHeader}>
+                  <Text style={[styles.contentTitle, { color: colors.foreground }]}>Selected content</Text>
+                  <TouchableOpacity
+                    style={[styles.visibilityButton, { borderColor: selectedContentField.enabled ? colors.primary : colors.border, backgroundColor: selectedContentField.enabled ? colors.secondary : colors.card }]}
+                    onPress={() => updateContentField(selectedField.id, selectedContentField.id, { enabled: !selectedContentField.enabled })}
+                  >
+                    <Text style={{ color: selectedContentField.enabled ? colors.primary : colors.mutedForeground, fontSize: 12 }}>{selectedContentField.enabled ? "Shown" : "Hidden"}</Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={[styles.textInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+                  value={selectedContentField.label}
+                  onChangeText={(label) => updateContentField(selectedField.id, selectedContentField.id, { label })}
+                  placeholder="Content label"
+                  placeholderTextColor={colors.mutedForeground}
+                />
+                <View style={styles.inputRow}>
+                  <FieldNumberInput label="Left X (mm)" value={selectedContentField.x} onChange={(value) => updateContentField(selectedField.id, selectedContentField.id, { x: value })} />
+                  <FieldNumberInput label="Top Y (mm)" value={selectedContentField.y} onChange={(value) => updateContentField(selectedField.id, selectedContentField.id, { y: value })} />
+                </View>
+                <View style={styles.inputRow}>
+                  <FieldNumberInput label="Width (mm)" value={selectedContentField.width} onChange={(value) => updateContentField(selectedField.id, selectedContentField.id, { width: value })} />
+                  <FieldNumberInput label="Height (mm)" value={selectedContentField.height} onChange={(value) => updateContentField(selectedField.id, selectedContentField.id, { height: value })} />
+                  <FieldNumberInput label="Font (pt)" value={selectedContentField.fontSize} onChange={(value) => updateContentField(selectedField.id, selectedContentField.id, { fontSize: clamp(value, 5, 48) })} />
                 </View>
               </View>
             ) : null}
@@ -796,9 +1037,14 @@ const styles = StyleSheet.create({
   contentHeader: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   contentTitle: { fontSize: 12, fontFamily: "Inter_700Bold" },
   contentDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
+  editorOptions: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 10 },
+  editorOption: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1.1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6 },
   wholeCategoryButton: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1.2, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6 },
   contentOptions: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 9 },
   contentOption: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1.1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6 },
+  individualEditingButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1.1, borderRadius: 9, paddingVertical: 8, marginTop: 10 },
+  individualEditingText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  contentEditCard: { borderWidth: 1.4, borderRadius: 11, padding: 10, marginTop: 10 },
   smallAction: { borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8 },
   smallActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   templateRow: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1.2, borderRadius: 10, padding: 10 },

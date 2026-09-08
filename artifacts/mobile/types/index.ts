@@ -87,12 +87,27 @@ export interface PrescriptionSubsectionConfig {
   options: string[];
 }
 
+export interface RxPadOverlayContentField {
+  id: string;
+  label: string;
+  enabled: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  color?: string;
+}
+
 export interface RxPadOverlayField {
   id: string;
   label: string;
   enabled: boolean;
+  showCategoryLabel?: boolean;
+  showContentLabels?: boolean;
   printMode?: "all" | "selected";
   contentSelection?: string[];
+  contentFields?: RxPadOverlayContentField[];
   x: number;
   y: number;
   width: number;
