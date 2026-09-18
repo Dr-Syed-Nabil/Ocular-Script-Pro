@@ -7,6 +7,7 @@ import {
   Image,
   PanResponder,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -391,7 +392,8 @@ export default function RxPadSettingsScreen() {
   const insets = useSafeAreaInsets();
   const { prescriptionId } = useLocalSearchParams<{ prescriptionId?: string }>();
   const { prescriptions, prescriptionConfig, updatePrescriptionConfig } = useData();
-  const currentPrescription = prescriptions.find((prescription) => prescription.id === prescriptionId);
+  const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<string | undefined>(prescriptionId);
+  const currentPrescription = prescriptions.find((prescription) => prescription.id === selectedPrescriptionId);
   const initialOverlays = configuredOverlays(prescriptionConfig);
   const initialSelectedId = prescriptionConfig.activeRxPadOverlayId || initialOverlays[0]?.id || "rx-pad-1";
   const [templates, setTemplates] = useState<RxPadOverlayConfig[]>(initialOverlays);
@@ -611,6 +613,58 @@ export default function RxPadSettingsScreen() {
           </Text>
         </View>
 
+        {!prescriptionId ? (
+          <View style={[styles.prescriptionSelector, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.prescriptionSelectorTitle, { color: colors.foreground }]}>Preview prescription readiness</Text>
+            <Text style={[styles.prescriptionSelectorDescription, { color: colors.mutedForeground }]}>
+              Choose a prescription to see which enabled categories have content.
+            </Text>
+            {prescriptions.length ? (
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.prescriptionOptions}
+              >
+                {prescriptions.map((prescription) => {
+                  const selected = prescription.id === selectedPrescriptionId;
+                  return (
+                    <TouchableOpacity
+                      key={prescription.id}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`Preview readiness for ${prescription.patientName || "unnamed patient"}`}
+                      testID={`rx-pad-prescription-${prescription.id}`}
+                      style={[
+                        styles.prescriptionOption,
+                        {
+                          borderColor: selected ? colors.primary : colors.border,
+                          backgroundColor: selected ? colors.secondary : colors.surface,
+                        },
+                      ]}
+                      onPress={() => setSelectedPrescriptionId(prescription.id)}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.prescriptionOptionName, { color: selected ? colors.primary : colors.foreground }]}
+                      >
+                        {prescription.patientName || "Unnamed patient"}
+                      </Text>
+                      <Text style={[styles.prescriptionOptionDate, { color: colors.mutedForeground }]}>
+                        {prescription.date}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Text style={[styles.prescriptionSelectorEmpty, { color: colors.mutedForeground }]}>
+                No saved prescriptions are available to preview.
+              </Text>
+            )}
+          </View>
+        ) : null}
+
         <View
           accessibilityRole="summary"
           style={[
@@ -657,7 +711,9 @@ export default function RxPadSettingsScreen() {
             </Text>
             <Text style={[styles.readinessText, { color: colors.mutedForeground }]}>
               {!currentPrescription
-                ? "Open Rx Pad settings from a prescription to check its printable fields."
+                ? prescriptions.length
+                  ? "Choose a prescription above to check its printable fields."
+                  : "Create a prescription to check its printable fields here."
                 : printableFields.length
                   ? `${printableFields.length} of ${enabledFieldCount} enabled field${enabledFieldCount === 1 ? "" : "s"} has content for ${currentPrescription.patientName || "this prescription"}.`
                   : "No enabled Rx Pad field has printable content. Enable a field or enter prescription details."}
@@ -1027,6 +1083,14 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 4 },
   infoBox: { borderRadius: 12, padding: 12, marginBottom: 14 },
   infoText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  prescriptionSelector: { borderRadius: 13, borderWidth: 1, padding: 12, marginBottom: 14 },
+  prescriptionSelectorTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  prescriptionSelectorDescription: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
+  prescriptionOptions: { gap: 8, paddingTop: 10, paddingRight: 2 },
+  prescriptionOption: { width: 150, borderWidth: 1.2, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9 },
+  prescriptionOptionName: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  prescriptionOptionDate: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
+  prescriptionSelectorEmpty: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 9 },
   readinessCard: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 13, borderWidth: 1, padding: 12, marginBottom: 14 },
   readinessIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   readinessTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },

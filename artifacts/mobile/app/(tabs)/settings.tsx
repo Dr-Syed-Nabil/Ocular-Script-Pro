@@ -253,9 +253,15 @@ export default function SettingsScreen() {
               {activeRxPadId === overlay.id ? <Text style={s.rxPadActive}>Active</Text> : null}
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={s.changePasswordBtn} onPress={() => router.push("/rx-pad-settings")} activeOpacity={0.85}>
+          <TouchableOpacity
+            accessibilityLabel="Manage Rx Pad overlays and preview prescription readiness"
+            testID="manage-rx-pad-overlays"
+            style={s.changePasswordBtn}
+            onPress={() => router.push("/rx-pad-settings")}
+            activeOpacity={0.85}
+          >
             <Feather name="layout" size={17} color={colors.primary} style={{ marginRight: 8 }} />
-            <Text style={s.changePasswordText}>Manage Rx Pad Overlays</Text>
+            <Text style={s.changePasswordText}>Manage & preview Rx Pad</Text>
           </TouchableOpacity>
         </FieldGroup>
 
