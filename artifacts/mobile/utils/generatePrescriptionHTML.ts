@@ -6,6 +6,7 @@ import {
   normalizeRxPadImageFit,
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
+import { getUntranslatedEnglishWords } from "@/utils/banglaTranslate";
 
 /* ── helpers ── */
 function esc(s: string | undefined): string {
@@ -306,6 +307,52 @@ export function hasRxPadOverlayContent(rx: Prescription, overlay: RxPadOverlayCo
 }
 
 export type RxPadPrintPath = "web" | "native";
+
+export interface BanglaPrintWarning {
+  field: string;
+  words: string[];
+}
+
+export function getBanglaPrintWarnings(rx: Prescription): BanglaPrintWarning[] {
+  const medicationNames = (rx.drugs || []).map((drug) => drug.name);
+  const candidates: { field: string; text: string }[] = [
+    { field: "Advice", text: rx.adviceBn || "" },
+    { field: "Follow-up", text: rx.followUpBn || "" },
+    ...(rx.drugs || []).flatMap((drug, index) => {
+      const label = drug.name.trim() || `Medication ${index + 1}`;
+      if (drug.dosePhases?.length) {
+        return drug.dosePhases.flatMap((phase, phaseIndex) => [
+          { field: `${label} schedule ${phaseIndex + 1}`, text: phase.schedule || "" },
+          { field: `${label} duration ${phaseIndex + 1}`, text: `${phase.durationValue || ""} ${phase.durationUnit || ""}` },
+        ]);
+      }
+      return [
+        { field: `${label} schedule`, text: drug.scheduleBn || "" },
+        { field: `${label} duration`, text: drug.durationBn || "" },
+      ];
+    }),
+  ];
+
+  return candidates.flatMap(({ field, text }) => {
+    const words = getUntranslatedEnglishWords(text, medicationNames);
+    return words.length ? [{ field, words }] : [];
+  });
+}
+
+export type BanglaPrintReviewDecision =
+  | { action: "review"; printPath: RxPadPrintPath; warnings: BanglaPrintWarning[] }
+  | { action: "print"; printPath: RxPadPrintPath };
+
+export function getBanglaPrintReviewDecision(
+  rx: Prescription,
+  printPath: RxPadPrintPath,
+  acknowledged: boolean,
+): BanglaPrintReviewDecision {
+  const warnings = getBanglaPrintWarnings(rx);
+  return warnings.length && !acknowledged
+    ? { action: "review", printPath, warnings }
+    : { action: "print", printPath };
+}
 
 export type RxPadPrintDecision =
   | {

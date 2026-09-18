@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@/context/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { Drug, EyeSpectacleRx, EyeVA, PastHistory } from "@/types";
-import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML, getRxPadPrintDecision } from "@/utils/generatePrescriptionHTML";
+import { generateFullPrintHTML, generateRxPadHTML, generateRxPadOverlayHTML, getBanglaPrintReviewDecision, getRxPadPrintDecision } from "@/utils/generatePrescriptionHTML";
 import { QRDisplay } from "@/components/QRDisplay";
 import QRCodeLib from "qrcode";
 
@@ -190,6 +190,7 @@ export default function PrescriptionDetailScreen() {
   const s = styles(colors);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [pendingBanglaPrintMode, setPendingBanglaPrintMode] = useState<"full" | "pad" | null>(null);
 
   const rx = prescriptions.find((r) => r.id === id);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -210,11 +211,17 @@ export default function PrescriptionDetailScreen() {
     router.push(`/new-rx?editId=${rx.id}`);
   };
 
-  const handlePrint = async (mode: "full" | "pad") => {
+  const handlePrint = async (mode: "full" | "pad", banglaWarningAcknowledged = false) => {
     if (!rx) return;
+    const printPath = Platform.OS === "web" ? "web" : "native";
+    const banglaDecision = getBanglaPrintReviewDecision(rx, printPath, banglaWarningAcknowledged);
+    if (banglaDecision.action === "review") {
+      setShowPrintModal(false);
+      setPendingBanglaPrintMode(mode);
+      return;
+    }
     const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
       || prescriptionConfig.rxPadOverlay;
-    const printPath = Platform.OS === "web" ? "web" : "native";
     const printDecision = getRxPadPrintDecision(
       rx,
       mode === "pad" ? activeRxPadOverlay : undefined,
@@ -308,6 +315,11 @@ export default function PrescriptionDetailScreen() {
       : prescriptionConfig.sections.find((section) => section.id === id)?.enabled !== false);
   const activeRxPadOverlay = prescriptionConfig.rxPadOverlays?.find((overlay) => overlay.id === prescriptionConfig.activeRxPadOverlayId)
     || prescriptionConfig.rxPadOverlay;
+  const banglaReviewDecision = getBanglaPrintReviewDecision(
+    rx,
+    Platform.OS === "web" ? "web" : "native",
+    false,
+  );
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
@@ -351,6 +363,57 @@ export default function PrescriptionDetailScreen() {
           <TouchableOpacity style={{ marginTop: 14, alignItems: "center", padding: 10 }} onPress={() => setShowPrintModal(false)}>
             <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>Cancel</Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={pendingBanglaPrintMode !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingBanglaPrintMode(null)}
+      >
+        <View style={s.reviewBackdrop}>
+          <View style={s.reviewCard}>
+            <View style={s.reviewIcon}>
+              <Feather name="alert-triangle" size={22} color={colors.clinicalWarning} />
+            </View>
+            <Text style={s.reviewTitle}>Review untranslated instructions</Text>
+            <Text style={s.reviewBody}>
+              Some English instruction text remains in the Bangla prescription. Correct it before printing, or confirm that it is safe to print.
+            </Text>
+            <View style={s.reviewList}>
+              {banglaReviewDecision.action === "review"
+                ? banglaReviewDecision.warnings.slice(0, 4).map((warning) => (
+                    <Text key={warning.field} style={s.reviewItem}>
+                      <Text style={s.reviewItemLabel}>{warning.field}: </Text>
+                      {warning.words.join(", ")}
+                    </Text>
+                  ))
+                : null}
+            </View>
+            <TouchableOpacity
+              style={s.reviewPrimaryButton}
+              onPress={() => {
+                const mode = pendingBanglaPrintMode;
+                setPendingBanglaPrintMode(null);
+                if (mode) handlePrint(mode, true);
+              }}
+            >
+              <Text style={s.reviewPrimaryButtonText}>Print anyway</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.reviewSecondaryButton}
+              onPress={() => {
+                setPendingBanglaPrintMode(null);
+                handleEdit();
+              }}
+            >
+              <Text style={s.reviewSecondaryButtonText}>Edit prescription</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.reviewCancelButton} onPress={() => setPendingBanglaPrintMode(null)}>
+              <Text style={s.reviewCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
@@ -662,4 +725,38 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     },
     chamberName: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground },
     chamberAddr: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 1 },
+    reviewBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      justifyContent: "center",
+      paddingHorizontal: 20,
+    },
+    reviewCard: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 20,
+      maxWidth: 460,
+      width: "100%",
+      alignSelf: "center",
+    },
+    reviewIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.clinicalWarning + "18",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 12,
+    },
+    reviewTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: colors.foreground },
+    reviewBody: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 19, marginTop: 7 },
+    reviewList: { backgroundColor: colors.muted, borderRadius: 10, padding: 12, gap: 5, marginVertical: 16 },
+    reviewItem: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 19 },
+    reviewItemLabel: { fontFamily: "Inter_700Bold" },
+    reviewPrimaryButton: { backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: "center" },
+    reviewPrimaryButtonText: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },
+    reviewSecondaryButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 9 },
+    reviewSecondaryButtonText: { color: colors.primary, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+    reviewCancelButton: { paddingVertical: 12, alignItems: "center", marginTop: 2 },
+    reviewCancelButtonText: { color: colors.mutedForeground, fontSize: 14, fontFamily: "Inter_500Medium" },
   });

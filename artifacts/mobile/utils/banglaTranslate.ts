@@ -138,3 +138,36 @@ export function translateDosingSchedule(schedule: string): string {
 export function isAlreadyBangla(text: string): boolean {
   return /[\u0980-\u09FF]/.test(text);
 }
+
+const ACCEPTED_CLINICAL_TOKENS = new Set([
+  "bd", "be", "bid", "hs", "le", "od", "prn", "qid", "re", "sos", "tds", "tid",
+  "g", "gm", "mcg", "mg", "ml", "mm", "mmhg",
+]);
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Returns the meaningful Latin-script words that would still be patient-facing
+ * in a Bangla instruction. Medication names and standard clinical shorthand are
+ * intentionally ignored.
+ */
+export function getUntranslatedEnglishWords(
+  text: string,
+  medicationNames: string[] = [],
+): string[] {
+  if (!text.trim()) return [];
+
+  let reviewText = text;
+  for (const medicationName of medicationNames.map((name) => name.trim()).filter(Boolean)) {
+    reviewText = reviewText.replace(new RegExp(`\\b${escapeRegExp(medicationName)}\\b`, "gi"), " ");
+  }
+
+  const words = reviewText.match(/[A-Za-z][A-Za-z'-]*/g) || [];
+  return words.filter((word, index) => {
+    const normalized = word.toLowerCase().replace(/['-]/g, "");
+    if (normalized.length < 2 || ACCEPTED_CLINICAL_TOKENS.has(normalized)) return false;
+    return words.findIndex((candidate) => candidate.toLowerCase() === word.toLowerCase()) === index;
+  });
+}

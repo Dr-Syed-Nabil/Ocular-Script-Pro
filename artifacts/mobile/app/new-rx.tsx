@@ -2103,7 +2103,15 @@ export default function NewRxScreen() {
         ) : null}
         {adviceBn ? (
           <View style={s.bnBlock}>
-            <Text style={s.bnText}>{adviceBn}</Text>
+            <TextInput
+              value={adviceBn}
+              onChangeText={setAdviceBn}
+              multiline
+              accessibilityLabel="Bangla advice"
+              placeholder="বাংলা নির্দেশনা লিখুন…"
+              placeholderTextColor={colors.mutedForeground}
+              style={[s.bnText, { flex: 1, padding: 0 }]}
+            />
             <TouchableOpacity onPress={() => setAdviceBn("")} style={{ marginLeft: 8 }}>
               <Feather name="x" size={14} color={colors.mutedForeground} />
             </TouchableOpacity>
@@ -2134,7 +2142,15 @@ export default function NewRxScreen() {
           placeholder="Or type custom follow-up…" showTranslate />
         {followUpBn && followUpBn !== followUp ? (
           <View style={[s.bnBlock, { marginTop: 6 }]}>
-            <Text style={s.bnText}>{followUpBn}</Text>
+            <TextInput
+              value={followUpBn}
+              onChangeText={setFollowUpBn}
+              multiline
+              accessibilityLabel="Bangla follow-up"
+              placeholder="বাংলা ফলো-আপ লিখুন…"
+              placeholderTextColor={colors.mutedForeground}
+              style={[s.bnText, { flex: 1, padding: 0 }]}
+            />
             <TouchableOpacity onPress={() => setFollowUpBn("")} style={{ marginLeft: 8 }}>
               <Feather name="x" size={14} color={colors.mutedForeground} />
             </TouchableOpacity>

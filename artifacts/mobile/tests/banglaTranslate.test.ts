@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getUntranslatedEnglishWords,
   isAlreadyBangla,
   tobnDigits,
   translateDosingSchedule,
   translateToBangla,
 } from "@/utils/banglaTranslate";
+import { getBanglaPrintReviewDecision, getBanglaPrintWarnings } from "@/utils/generatePrescriptionHTML";
+import type { Prescription } from "@/types";
 
 test("translates dosing schedules with captured numeric replacements", () => {
   assert.equal(translateToBangla("Take 2 + 1 + 0"), "Take ২+১+০");
@@ -69,4 +72,50 @@ test("translates English phrases around existing Bangla text without altering it
     translateToBangla(advice),
     "চোখ ঘষবেন না। হাত ধুয়ে নিন, then মলম লাগান (Chloramphenicol).",
   );
+});
+
+test("finds meaningful untranslated instructions without flagging medicines or abbreviations", () => {
+  assert.deepEqual(
+    getUntranslatedEnglishWords("Timolol: apply gently BD, then wash.", ["Timolol"]),
+    ["apply", "gently", "then", "wash"],
+  );
+  assert.deepEqual(
+    getUntranslatedEnglishWords("Timolol OD / Moxifloxacin QID", ["Timolol", "Moxifloxacin"]),
+    [],
+  );
+});
+
+test("reviews only Bangla patient instruction fields and identifies their source", () => {
+  const rx = {
+    advice: "Wash your hands",
+    adviceBn: "হাত ধুয়ে নিন, then wait",
+    followUp: "Review in one week",
+    followUpBn: "১ সপ্তাহ",
+    drugs: [{
+      id: "drug-1",
+      name: "Timolol",
+      route: "Eye Drop",
+      schedule: "BD",
+      scheduleBn: "Timolol BD",
+      duration: "7 days",
+      durationBn: "৭ দিন",
+      notes: "",
+    }],
+  } as Prescription;
+
+  assert.deepEqual(getBanglaPrintWarnings(rx), [
+    { field: "Advice", words: ["then", "wait"] },
+  ]);
+
+  for (const printPath of ["web", "native"] as const) {
+    assert.deepEqual(getBanglaPrintReviewDecision(rx, printPath, false), {
+      action: "review",
+      printPath,
+      warnings: [{ field: "Advice", words: ["then", "wait"] }],
+    });
+    assert.deepEqual(getBanglaPrintReviewDecision(rx, printPath, true), {
+      action: "print",
+      printPath,
+    });
+  }
 });
