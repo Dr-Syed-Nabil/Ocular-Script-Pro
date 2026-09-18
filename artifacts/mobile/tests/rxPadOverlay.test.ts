@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
 import {
+  commitRxPadImagePositionInput,
   constrainRxPadOverlayField,
   createRxPadOverlayContentFields,
   getRxPadImageBackgroundPosition,
@@ -236,8 +237,8 @@ test("keeps saved scan alignment consistent across reopening, PDF HTML, and prev
         imageWidthPx: 400,
         imageHeightPx: 400,
         imageFit: "contain",
-        imagePositionX: 25,
-        imagePositionY: 75,
+        imagePositionX: 25.5,
+        imagePositionY: 75.25,
         paperWidthMm: 200,
         paperHeightMm: 300,
         fields: [],
@@ -257,22 +258,38 @@ test("keeps saved scan alignment consistent across reopening, PDF HTML, and prev
   const clampedOverlay = reopened.rxPadOverlays?.find((candidate) => candidate.id === "clamped-pad");
 
   assert.ok(overlay);
-  assert.equal(overlay.imagePositionX, 25);
-  assert.equal(overlay.imagePositionY, 75);
+  assert.equal(overlay.imagePositionX, 25.5);
+  assert.equal(overlay.imagePositionY, 75.25);
   assert.equal(clampedOverlay?.imagePositionX, 0);
   assert.equal(clampedOverlay?.imagePositionY, 100);
 
   const html = generateRxPadOverlayHTML(emptyPrescription, overlay);
-  assert.match(html, /background-position: 25% 75%; background-size: contain;/);
+  assert.match(html, /background-position: 25.5% 75.25%; background-size: contain;/);
 
   assert.deepEqual(
     getRxPadImageRenderGeometry(200, 300, 400, 400, "contain", overlay.imagePositionX, overlay.imagePositionY),
-    { left: 0, top: 75, width: 200, height: 200 },
+    { left: 0, top: 75.25, width: 200, height: 200 },
   );
   assert.deepEqual(
     getRxPadImageRenderGeometry(200, 300, 400, 400, "crop", overlay.imagePositionX, overlay.imagePositionY),
-    { left: -25, top: 0, width: 300, height: 300 },
+    { left: -25.5, top: 0, width: 300, height: 300 },
   );
+});
+
+test("commits exact scan alignment text after normal character-by-character decimal entry", () => {
+  let typed = "";
+  for (const character of ["2", "5", ".", "5"]) {
+    typed += character;
+  }
+
+  assert.equal(typed, "25.5");
+  assert.equal(commitRxPadImagePositionInput(typed, 50), 25.5);
+  assert.equal(commitRxPadImagePositionInput("0", 50), 0);
+  assert.equal(commitRxPadImagePositionInput("100", 50), 100);
+  assert.equal(commitRxPadImagePositionInput("-0.5", 50), 0);
+  assert.equal(commitRxPadImagePositionInput("100.5", 50), 100);
+  assert.equal(commitRxPadImagePositionInput("", 37.5), 37.5);
+  assert.equal(commitRxPadImagePositionInput("25.", 50), 25);
 });
 
 test("loads each clinician's own active Rx pad and clears it at sign-out", () => {

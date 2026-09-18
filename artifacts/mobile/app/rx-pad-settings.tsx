@@ -22,6 +22,7 @@ import {
   constrainRxPadOverlayContentField,
   constrainRxPadOverlayField,
   constrainRxPadOverlayFields,
+  commitRxPadImagePositionInput,
   createRxPadOverlayContentFields,
   getRxPadImageRenderGeometry,
   getRxPadImageResizeMode,
@@ -316,7 +317,20 @@ function ImageAlignmentControl({
 }) {
   const colors = useColors();
   const normalizedValue = normalizeRxPadImagePosition(value);
+  const [inputValue, setInputValue] = useState(String(normalizedValue));
+  const editingRef = React.useRef(false);
   const adjust = (amount: number) => onChange(normalizeRxPadImagePosition(normalizedValue + amount));
+  useEffect(() => {
+    if (!editingRef.current) {
+      setInputValue(String(normalizedValue));
+    }
+  }, [normalizedValue]);
+  const commitExactValue = () => {
+    editingRef.current = false;
+    const nextValue = commitRxPadImagePositionInput(inputValue, normalizedValue);
+    setInputValue(String(nextValue));
+    onChange(nextValue);
+  };
 
   return (
     <View style={styles.alignmentRow}>
@@ -331,7 +345,25 @@ function ImageAlignmentControl({
         >
           <Feather name="minus" size={14} color={normalizedValue <= 0 ? colors.mutedForeground : colors.primary} />
         </TouchableOpacity>
-        <Text style={[styles.alignmentValue, { color: colors.foreground }]}>{Math.round(normalizedValue)}%</Text>
+        <View style={[styles.alignmentInputFrame, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <TextInput
+            accessibilityLabel={`${label} scan alignment percentage`}
+            testID={`${testID}-input`}
+            style={[styles.alignmentInput, { color: colors.foreground }]}
+            value={inputValue}
+            onFocus={() => {
+              editingRef.current = true;
+            }}
+            onChangeText={setInputValue}
+            onBlur={commitExactValue}
+            onSubmitEditing={commitExactValue}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            returnKeyType="done"
+            selectTextOnFocus
+          />
+          <Text style={[styles.alignmentPercent, { color: colors.mutedForeground }]}>%</Text>
+        </View>
         <TouchableOpacity
           accessibilityLabel={`Move scan ${label.toLowerCase()} forward`}
           testID={`${testID}-increase`}
@@ -1020,7 +1052,9 @@ const styles = StyleSheet.create({
   alignmentLabel: { flex: 1, fontSize: 11, fontFamily: "Inter_500Medium" },
   alignmentActions: { flexDirection: "row", alignItems: "center", gap: 6 },
   alignmentButton: { width: 30, height: 30, borderWidth: 1, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  alignmentValue: { width: 42, textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  alignmentInputFrame: { width: 66, height: 30, borderWidth: 1, borderRadius: 8, flexDirection: "row", alignItems: "center", paddingHorizontal: 6 },
+  alignmentInput: { flex: 1, minWidth: 0, padding: 0, textAlign: "right", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  alignmentPercent: { marginLeft: 2, fontSize: 10, fontFamily: "Inter_500Medium" },
   centerButton: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, height: 30, alignItems: "center", justifyContent: "center" },
   centerButtonText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   inputRow: { flexDirection: "row", gap: 9, marginTop: 9 },

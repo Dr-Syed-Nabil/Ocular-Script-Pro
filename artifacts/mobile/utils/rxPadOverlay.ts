@@ -35,6 +35,13 @@ export function normalizeRxPadImagePosition(value: unknown): number {
   return Math.max(0, Math.min(100, position));
 }
 
+export function commitRxPadImagePositionInput(text: string, fallback: number): number {
+  const parsed = Number(text.trim());
+  return text.trim() !== "" && Number.isFinite(parsed)
+    ? normalizeRxPadImagePosition(parsed)
+    : normalizeRxPadImagePosition(fallback);
+}
+
 export function getRxPadImageBackgroundPosition(positionX: unknown, positionY: unknown): string {
   return `${normalizeRxPadImagePosition(positionX)}% ${normalizeRxPadImagePosition(positionY)}%`;
 }
