@@ -302,6 +302,28 @@ export function getRxPadOverlayFieldValue(rx: Prescription, field: RxPadOverlayF
   }
 }
 
+export interface RxPadOverlayReadiness {
+  printableFieldIds: string[];
+  enabledFieldCount: number;
+  selectedFieldIsPrintable: boolean;
+}
+
+export function getRxPadOverlayReadiness(
+  rx: Prescription,
+  overlay: RxPadOverlayConfig,
+  selectedFieldId?: string,
+): RxPadOverlayReadiness {
+  const printableFieldIds = overlay.fields
+    .filter((field) => field.enabled && getRxPadOverlayFieldValue(rx, field).trim().length > 0)
+    .map((field) => field.id);
+
+  return {
+    printableFieldIds,
+    enabledFieldCount: overlay.fields.filter((field) => field.enabled).length,
+    selectedFieldIsPrintable: selectedFieldId ? printableFieldIds.includes(selectedFieldId) : false,
+  };
+}
+
 export function hasRxPadOverlayContent(rx: Prescription, overlay: RxPadOverlayConfig): boolean {
   return overlay.fields.some((field) => field.enabled && getRxPadOverlayFieldValue(rx, field).trim().length > 0);
 }

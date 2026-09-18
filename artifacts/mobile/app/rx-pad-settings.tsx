@@ -34,7 +34,7 @@ import {
   normalizeRxPadImagePosition,
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
-import { getRxPadOverlayFieldValue } from "@/utils/generatePrescriptionHTML";
+import { getRxPadOverlayReadiness } from "@/utils/generatePrescriptionHTML";
 
 const PREVIEW_WIDTH = 340;
 const IMAGE_FIT_OPTIONS: Array<{ value: RxPadImageFit; label: string; description: string }> = [
@@ -417,15 +417,16 @@ export default function RxPadSettingsScreen() {
   const selectedContentIds = new Set(selectedField?.contentSelection || []);
   const selectedContentIsPartial = selectedField?.printMode === "selected";
   const selectedContentField = selectedField?.contentFields?.find((field) => field.id === selectedContentId);
-  const printableFields = currentPrescription
-    ? draft.fields.filter((field) => field.enabled && getRxPadOverlayFieldValue(currentPrescription, field).trim().length > 0)
-    : [];
-  const enabledFieldCount = draft.fields.filter((field) => field.enabled).length;
-  const selectedFieldIsPrintable = Boolean(
-    currentPrescription
-    && selectedField?.enabled
-    && getRxPadOverlayFieldValue(currentPrescription, selectedField).trim().length > 0,
-  );
+  const readiness = currentPrescription
+    ? getRxPadOverlayReadiness(currentPrescription, draft, selectedField?.id)
+    : {
+      printableFieldIds: [],
+      enabledFieldCount: draft.fields.filter((field) => field.enabled).length,
+      selectedFieldIsPrintable: false,
+    };
+  const printableFields = readiness.printableFieldIds;
+  const enabledFieldCount = readiness.enabledFieldCount;
+  const selectedFieldIsPrintable = readiness.selectedFieldIsPrintable;
   const previewScale = PREVIEW_WIDTH / draft.paperWidthMm;
   const previewHeight = draft.paperHeightMm * previewScale;
   const imageFit = normalizeRxPadImageFit(draft.imageFit);

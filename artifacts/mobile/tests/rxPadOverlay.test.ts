@@ -18,6 +18,7 @@ import {
 import {
   generateRxPadOverlayHTML,
   getRxPadPrintDecision,
+  getRxPadOverlayReadiness,
   hasRxPadOverlayContent,
 } from "@/utils/generatePrescriptionHTML";
 import type { Prescription } from "@/types";
@@ -732,6 +733,75 @@ test("detects when an overlay has no enabled printable fields", () => {
       overlay,
     ),
     true,
+  );
+});
+
+test("updates Rx Pad editor readiness immediately as fields and category contents change", () => {
+  const prescription = {
+    ...emptyPrescription,
+    patientName: "Mina",
+    patientAge: "42",
+  };
+  const patientField = {
+    ...field,
+    id: "patient",
+    printMode: "selected" as const,
+    contentSelection: ["name"],
+  };
+  const overlay = {
+    id: "live-readiness-pad",
+    name: "Live readiness pad",
+    paperWidthMm: 100,
+    paperHeightMm: 80,
+    fields: [patientField],
+  };
+
+  assert.deepEqual(
+    getRxPadOverlayReadiness(prescription, overlay, "patient"),
+    {
+      printableFieldIds: ["patient"],
+      enabledFieldCount: 1,
+      selectedFieldIsPrintable: true,
+    },
+    "an enabled category with selected prescription content should be ready",
+  );
+
+  const disabledOverlay = {
+    ...overlay,
+    fields: [{ ...patientField, enabled: false }],
+  };
+  assert.deepEqual(
+    getRxPadOverlayReadiness(prescription, disabledOverlay, "patient"),
+    {
+      printableFieldIds: [],
+      enabledFieldCount: 0,
+      selectedFieldIsPrintable: false,
+    },
+    "hiding the only printable field should immediately empty the summary",
+  );
+
+  const ageOnlyOverlay = {
+    ...overlay,
+    fields: [{ ...patientField, contentSelection: ["age"] }],
+  };
+  assert.deepEqual(
+    getRxPadOverlayReadiness(prescription, ageOnlyOverlay, "patient").printableFieldIds,
+    ["patient"],
+    "selecting populated category content should immediately restore readiness",
+  );
+
+  const clearedOverlay = {
+    ...overlay,
+    fields: [{ ...patientField, contentSelection: [] }],
+  };
+  assert.deepEqual(
+    getRxPadOverlayReadiness(prescription, clearedOverlay, "patient"),
+    {
+      printableFieldIds: [],
+      enabledFieldCount: 1,
+      selectedFieldIsPrintable: false,
+    },
+    "clearing category content should immediately return the editor to empty",
   );
 });
 
