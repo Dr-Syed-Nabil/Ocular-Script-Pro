@@ -248,7 +248,6 @@ test("mounted DataProvider isolates every clinician record across account switch
     assert.equal(latest.prescriptions[0]?.id, clinicianTwo.prescription.id);
     assert.equal(latest.doctor.nameEn, clinicianTwo.doctor.nameEn);
     assert.equal(latest.prescriptionConfig.activeRxPadOverlayId, clinicianTwo.prescriptionConfig.activeRxPadOverlayId);
-
     userOneCloud.resolve({ revision: 1, snapshot: clinicianOne.snapshot });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -259,6 +258,7 @@ test("mounted DataProvider isolates every clinician record across account switch
     assert.equal(latest.prescriptions[0]?.id, clinicianTwo.prescription.id);
     assert.equal(latest.doctor.nameEn, clinicianTwo.doctor.nameEn);
     assert.equal(latest.prescriptionConfig.activeRxPadOverlayId, clinicianTwo.prescriptionConfig.activeRxPadOverlayId);
+
   } finally {
     renderer?.unmount();
     moduleApi._load = originalLoad;

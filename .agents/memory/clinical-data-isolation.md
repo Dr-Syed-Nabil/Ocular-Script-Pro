@@ -8,3 +8,9 @@ OptiScript keeps an account-scoped cloud snapshot with a device-local cache for 
 **Why:** Clinicians need the same patients, prescriptions, profile, and Rx pad configuration on multiple signed-in devices while preserving the existing shared-device privacy boundary.
 
 **How to apply:** Scope local cache and server rows by authenticated Clerk user; clear provider state on every identity change, not only sign-out; and reject delayed loads or sync responses unless they still match the active user. Serialize local writes, upload changes through the authenticated sync API, and reconcile newer remote snapshots when the app resumes.
+
+Legacy unscoped storage is quarantine-only: record the first account that encounters it as the claimant, expose no legacy records until that claimant explicitly imports or discards them, and never let another account claim it.
+
+**Why:** Pre-account device data has no reliable owner signal, so assigning it automatically to the first account can disclose one clinician's records to another on a shared device.
+
+**How to apply:** Keep legacy values under their original keys until the claimant decision; use separate owner/candidate markers, and preserve the quarantine across sign-out and account switches.

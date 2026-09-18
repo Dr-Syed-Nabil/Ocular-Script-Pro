@@ -27,6 +27,8 @@ const PATIENTS_KEY = "@optiscript_patients";
 const DOCTOR_KEY = "@optiscript_doctor";
 const PRESCRIPTION_CONFIG_KEY = PRESCRIPTION_CONFIG_STORAGE_KEY;
 const SYNC_META_KEY = "@optiscript_sync_meta";
+const LEGACY_OWNER_KEY = "@optiscript_legacy_owner";
+const LEGACY_CANDIDATE_KEY = "@optiscript_legacy_candidate";
 const DEFAULT_RX_PAD_IMAGE = require("../assets/images/nabil-rx-pad-a4.jpg");
 const STORAGE_KEYS = [PRESCRIPTIONS_KEY, PATIENTS_KEY, DOCTOR_KEY, PRESCRIPTION_CONFIG_KEY];
 
@@ -129,6 +131,39 @@ function snapshotHasData(snapshot: SyncSnapshot): boolean {
     || JSON.stringify(snapshot.prescriptionConfig) !== JSON.stringify(DEFAULT_PRESCRIPTION_CONFIG);
 }
 
+function hasStoredValues(entries: ReadonlyArray<readonly [string, string | null]>): boolean {
+  return entries.some(([, value]) => value !== null);
+}
+
+function snapshotFromStorage(read: (key: string) => string | null): SyncSnapshot {
+  const rawPatients: unknown = read(PATIENTS_KEY) ? JSON.parse(read(PATIENTS_KEY) as string) : [];
+  const patients = (Array.isArray(rawPatients) ? rawPatients : [])
+    .map(normalizePatient)
+    .filter((patient): patient is Patient => Boolean(patient));
+  const patientsWithPuid = patients.map((patient) =>
+    patient.puid ? patient : { ...patient, puid: generateLegacyPuid() }
+  );
+  const patientsById = new Map(patientsWithPuid.map((patient) => [patient.id, patient]));
+  const rawRx: unknown = read(PRESCRIPTIONS_KEY) ? JSON.parse(read(PRESCRIPTIONS_KEY) as string) : [];
+  const prescriptions = (Array.isArray(rawRx) ? rawRx : [])
+    .map((item) => normalizePrescription(item, patientsById))
+    .filter(Boolean) as Prescription[];
+  const rawDoctor = read(DOCTOR_KEY) ? JSON.parse(read(DOCTOR_KEY) as string) : {};
+  const doctor = isRecord(rawDoctor)
+    ? { ...DEFAULT_DOCTOR, ...Object.fromEntries(Object.keys(DEFAULT_DOCTOR).map((key) => [key, text(rawDoctor[key])])) }
+    : DEFAULT_DOCTOR;
+  const prescriptionConfig = withBundledRxPadTemplate(deserializePrescriptionConfig(read(PRESCRIPTION_CONFIG_KEY)));
+  return {
+    patients: patientsWithPuid,
+    prescriptions: prescriptions.map((prescription) => ({
+      ...prescription,
+      patientPuid: prescription.patientPuid || patientsById.get(prescription.patientId)?.puid,
+    })),
+    doctor,
+    prescriptionConfig,
+  };
+}
+
 function recordTimestamp(record: { updatedAt?: string; createdAt: string }): number {
   const value = Date.parse(record.updatedAt || record.createdAt);
   return Number.isFinite(value) ? value : 0;
@@ -199,6 +234,9 @@ interface DataContextValue {
   prescriptionConfig: PrescriptionConfig;
   loading: boolean;
   syncStatus: SyncStatus;
+  legacyDataAvailable: boolean;
+  claimLegacyData: () => Promise<boolean>;
+  discardLegacyData: () => Promise<boolean>;
   addPrescription: (rx: Omit<Prescription, "id" | "createdAt">) => Promise<Prescription>;
   updatePrescription: (id: string, rx: Omit<Prescription, "id" | "createdAt">) => Promise<void>;
   deletePrescription: (id: string) => Promise<void>;
@@ -238,6 +276,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [prescriptionConfig, setPrescriptionConfig] = useState<PrescriptionConfig>(DEFAULT_PRESCRIPTION_CONFIG);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [legacyDataAvailable, setLegacyDataAvailable] = useState(false);
   const prescriptionsRef = useRef<Prescription[]>([]);
   const patientsRef = useRef<Patient[]>([]);
   const doctorRef = useRef<DoctorProfile>(DEFAULT_DOCTOR);
@@ -377,6 +416,56 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applySnapshot, persist, scheduleSync]);
 
+  const claimLegacyData = useCallback(async (): Promise<boolean> => {
+    if (!isSignedIn || !userId || !isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    const [owner, candidate, legacy] = await Promise.all([
+      AsyncStorage.getItem(LEGACY_OWNER_KEY),
+      AsyncStorage.getItem(LEGACY_CANDIDATE_KEY),
+      AsyncStorage.multiGet(STORAGE_KEYS),
+    ]);
+    if (!isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    if ((owner && owner !== userId) || (candidate && candidate !== userId) || !hasStoredValues(legacy)) {
+      setLegacyDataAvailable(false);
+      return false;
+    }
+
+    // Never overwrite an account's existing local cache during a claim. An
+    // explicit decision is only safe while this account has no local data.
+    const scoped = await AsyncStorage.multiGet(STORAGE_KEYS.map((key) => scopedKey(key)));
+    if (!isCurrentDataSession(activeUserIdRef.current, userId) || hasStoredValues(scoped)) return false;
+
+    await AsyncStorage.setItem(LEGACY_OWNER_KEY, userId);
+    if (!isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    const legacyByKey = new Map(legacy);
+    const snapshot = snapshotFromStorage((key) => legacyByKey.get(key) ?? null);
+    const applied = await applySnapshot(snapshot, userId);
+    if (!applied || !isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    await AsyncStorage.multiRemove(STORAGE_KEYS);
+    if (!isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    setLegacyDataAvailable(false);
+    scheduleSync(snapshot, userId);
+    return true;
+  }, [applySnapshot, isSignedIn, scheduleSync, scopedKey, userId]);
+
+  const discardLegacyData = useCallback(async (): Promise<boolean> => {
+    if (!isSignedIn || !userId || !isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    const [owner, candidate] = await Promise.all([
+      AsyncStorage.getItem(LEGACY_OWNER_KEY),
+      AsyncStorage.getItem(LEGACY_CANDIDATE_KEY),
+    ]);
+    if (!isCurrentDataSession(activeUserIdRef.current, userId) || (owner && owner !== userId) || (candidate && candidate !== userId)) return false;
+    const legacy = await AsyncStorage.multiGet(STORAGE_KEYS);
+    if (!isCurrentDataSession(activeUserIdRef.current, userId) || !hasStoredValues(legacy)) {
+      setLegacyDataAvailable(false);
+      return false;
+    }
+    await AsyncStorage.setItem(LEGACY_OWNER_KEY, userId);
+    await AsyncStorage.multiRemove(STORAGE_KEYS);
+    if (!isCurrentDataSession(activeUserIdRef.current, userId)) return false;
+    setLegacyDataAvailable(false);
+    return true;
+  }, [isSignedIn, userId]);
+
   useEffect(() => {
     if (!authLoaded) return;
     const nextUserId = isSignedIn && userId ? userId : null;
@@ -390,6 +479,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       latestSnapshotRef.current = null;
       syncMetaRef.current = { revision: 0, pending: false };
       serverRevisionRef.current = 0;
+      setLegacyDataAvailable(false);
       setPrescriptions([]);
       setPatients([]);
       setDoctor(DEFAULT_DOCTOR);
@@ -410,27 +500,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         const rawByKey = new Map(scoped);
         const legacyByKey = new Map(legacy);
-        const read = (key: string) => rawByKey.get(scopedKey(key)) || legacyByKey.get(key) || null;
-        const rawPatients: unknown = read(PATIENTS_KEY) ? JSON.parse(read(PATIENTS_KEY) as string) : [];
-        const migratedPatients = (Array.isArray(rawPatients) ? rawPatients : [])
-          .map(normalizePatient)
-          .filter(Boolean) as Patient[];
-        const patientsWithPuid = migratedPatients.map((patient) =>
-          patient.puid ? patient : { ...patient, puid: generateLegacyPuid() }
-        );
-        const patientsById = new Map(patientsWithPuid.map((patient) => [patient.id, patient]));
-        const rawRx: unknown = read(PRESCRIPTIONS_KEY) ? JSON.parse(read(PRESCRIPTIONS_KEY) as string) : [];
-        const normalizedRx = (Array.isArray(rawRx) ? rawRx : [])
-          .map((item) => normalizePrescription(item, patientsById))
-          .filter(Boolean) as Prescription[];
-        const rawDoctor = read(DOCTOR_KEY) ? JSON.parse(read(DOCTOR_KEY) as string) : {};
-        const savedDoctor = isRecord(rawDoctor) ? { ...DEFAULT_DOCTOR, ...Object.fromEntries(Object.keys(DEFAULT_DOCTOR).map((key) => [key, text(rawDoctor[key])])) } : DEFAULT_DOCTOR;
-        const configRaw = read(PRESCRIPTION_CONFIG_KEY);
-        const normalizedConfig = withBundledRxPadTemplate(deserializePrescriptionConfig(configRaw));
-        const normalizedWithPuid = normalizedRx.map((prescription) => ({
-          ...prescription,
-          patientPuid: prescription.patientPuid || patientsById.get(prescription.patientId)?.puid,
-        }));
+        const legacyOwner = await AsyncStorage.getItem(LEGACY_OWNER_KEY);
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
+        let legacyCandidate = await AsyncStorage.getItem(LEGACY_CANDIDATE_KEY);
+        if (!legacyOwner && !legacyCandidate && hasStoredValues(legacy)) {
+          await AsyncStorage.setItem(LEGACY_CANDIDATE_KEY, userId);
+          legacyCandidate = userId;
+        }
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
+        const canReadLegacy = legacyOwner === userId;
+        const legacyAvailable = !legacyOwner
+          && hasStoredValues(legacy)
+          && (!legacyCandidate || legacyCandidate === userId);
+        setLegacyDataAvailable(legacyAvailable);
+        const read = (key: string) => rawByKey.get(scopedKey(key))
+          ?? (canReadLegacy ? legacyByKey.get(key) : null)
+          ?? null;
+        const {
+          patients: patientsWithPuid,
+          prescriptions: normalizedWithPuid,
+          doctor: savedDoctor,
+          prescriptionConfig: normalizedConfig,
+        } = snapshotFromStorage(read);
         if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         prescriptionsRef.current = normalizedWithPuid;
         patientsRef.current = patientsWithPuid;
@@ -450,8 +541,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const rawSyncMeta = await AsyncStorage.getItem(scopedKey(SYNC_META_KEY));
         if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         syncMetaRef.current = normalizeSyncMeta(rawSyncMeta ? JSON.parse(rawSyncMeta) : undefined);
-        const usedLegacy = STORAGE_KEYS.some((key) => !rawByKey.get(scopedKey(key)) && legacyByKey.get(key));
-        if (usedLegacy || !rawByKey.get(scopedKey(PATIENTS_KEY)) || !rawByKey.get(scopedKey(PRESCRIPTIONS_KEY)) || !rawByKey.get(scopedKey(PRESCRIPTION_CONFIG_KEY))) {
+        const usedLegacy = canReadLegacy && STORAGE_KEYS.some((key) => !rawByKey.get(scopedKey(key)) && legacyByKey.get(key));
+        const missingScopedData = !rawByKey.get(scopedKey(PATIENTS_KEY))
+          || !rawByKey.get(scopedKey(PRESCRIPTIONS_KEY))
+          || !rawByKey.get(scopedKey(PRESCRIPTION_CONFIG_KEY));
+        if (usedLegacy || (!legacyAvailable && missingScopedData)) {
           await Promise.all([
             persist(PATIENTS_KEY, patientsWithPuid),
             persist(PRESCRIPTIONS_KEY, normalizedWithPuid),
@@ -623,6 +717,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         prescriptionConfig,
         loading,
         syncStatus,
+        legacyDataAvailable,
+        claimLegacyData,
+        discardLegacyData,
         addPrescription,
         updatePrescription,
         deletePrescription,

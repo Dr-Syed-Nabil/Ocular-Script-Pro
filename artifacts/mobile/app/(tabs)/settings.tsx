@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -56,7 +57,16 @@ function Field({ label, value, onChange, placeholder, multiline, keyboard }: {
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { doctor, updateDoctor, prescriptionConfig, updatePrescriptionConfig, syncStatus } = useData();
+  const {
+    doctor,
+    updateDoctor,
+    prescriptionConfig,
+    updatePrescriptionConfig,
+    syncStatus,
+    legacyDataAvailable,
+    claimLegacyData,
+    discardLegacyData,
+  } = useData();
   const { signOut } = useClerk();
   const { user } = useUser();
   const { getAvailability, list, enroll, revoke } = useBiometricCredentials();
@@ -134,6 +144,27 @@ export default function SettingsScreen() {
       activeRxPadOverlayId: id,
       rxPadOverlay: active,
     });
+  };
+
+  const reviewLegacyData = () => {
+    Alert.alert(
+      "Previous device data found",
+      "OptiScript found records saved before account sign-in. They have not been opened or assigned to this account. Only import them if they belong to you.",
+      [
+        { text: "Keep private", style: "destructive", onPress: () => void discardLegacyData() },
+        {
+          text: "Import to my account",
+          onPress: () => {
+            void claimLegacyData().then((claimed) => {
+              if (!claimed) {
+                Alert.alert("Import not completed", "The old records were kept private because this account already has saved data or another account owns the device data.");
+              }
+            });
+          },
+        },
+        { text: "Not now", style: "cancel" },
+      ],
+    );
   };
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -264,6 +295,24 @@ export default function SettingsScreen() {
             <Text style={s.changePasswordText}>Manage & preview Rx Pad</Text>
           </TouchableOpacity>
         </FieldGroup>
+
+        {legacyDataAvailable ? (
+          <FieldGroup title="Previous device data">
+            <Text style={{ fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 12 }}>
+              Older records are kept private until you confirm that they belong to this account. Other signed-in clinicians cannot view or claim them after an ownership decision.
+            </Text>
+            <TouchableOpacity
+              accessibilityLabel="Review previous device data"
+              testID="review-previous-device-data"
+              style={s.changePasswordBtn}
+              onPress={reviewLegacyData}
+              activeOpacity={0.85}
+            >
+              <Feather name="archive" size={17} color={colors.primary} style={{ marginRight: 8 }} />
+              <Text style={s.changePasswordText}>Review old device data</Text>
+            </TouchableOpacity>
+          </FieldGroup>
+        ) : null}
 
         <FieldGroup title="Account">
           <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: colors.foreground, marginBottom: 12 }}>
