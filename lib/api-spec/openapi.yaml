@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: sync
+    description: Account data synchronization
 paths:
   /healthz:
     get:
@@ -24,7 +26,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /sync:
+    get:
+      operationId: getSync
+      tags: [sync]
+      summary: Get the signed-in user's synchronized data
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current synchronized snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResponse"
+    put:
+      operationId: saveSync
+      tags: [sync]
+      summary: Save the signed-in user's synchronized data
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Snapshot saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResponse"
+        "409":
+          description: The server has a newer snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResponse"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +78,35 @@ components:
           type: string
       required:
         - status
+    SyncSnapshot:
+      type: object
+      additionalProperties: true
+    SyncResponse:
+      type: object
+      properties:
+        snapshot:
+          anyOf:
+            - $ref: "#/components/schemas/SyncSnapshot"
+            - type: "null"
+        revision:
+          type: integer
+        updatedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+      required:
+        - snapshot
+        - revision
+        - updatedAt
+    SyncRequest:
+      type: object
+      properties:
+        snapshot:
+          $ref: "#/components/schemas/SyncSnapshot"
+        baseRevision:
+          type: integer
+          minimum: 0
+      required:
+        - snapshot
 

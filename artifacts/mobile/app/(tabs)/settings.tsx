@@ -56,7 +56,7 @@ function Field({ label, value, onChange, placeholder, multiline, keyboard }: {
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { doctor, updateDoctor, prescriptionConfig, updatePrescriptionConfig } = useData();
+  const { doctor, updateDoctor, prescriptionConfig, updatePrescriptionConfig, syncStatus } = useData();
   const { signOut } = useClerk();
   const { user } = useUser();
   const { getAvailability, list, enroll, revoke } = useBiometricCredentials();
@@ -137,12 +137,26 @@ export default function SettingsScreen() {
   };
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const syncLabel = syncStatus === "synced"
+    ? "Cloud sync up to date"
+    : syncStatus === "syncing"
+      ? "Syncing changes…"
+      : syncStatus === "offline"
+        ? "Offline — saved on this device"
+        : syncStatus === "error"
+          ? "Cloud sync needs attention"
+          : "Cloud sync is ready";
+  const syncColor = syncStatus === "offline" || syncStatus === "error" ? colors.destructive : colors.primary;
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
       <View style={s.header}>
         <Text style={s.title}>Profile</Text>
         <Text style={s.sub}>Doctor & Clinic Details</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 }}>
+          <Feather name={syncStatus === "offline" ? "cloud-off" : "cloud"} size={13} color={syncColor} />
+          <Text style={{ color: syncColor, fontSize: 11, fontFamily: "Inter_500Medium" }}>{syncLabel}</Text>
+        </View>
       </View>
 
       <ScrollView

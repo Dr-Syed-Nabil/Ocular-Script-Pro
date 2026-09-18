@@ -213,6 +213,7 @@ export interface Prescription {
   followUpBn: string;
 
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Patient {
@@ -227,6 +228,7 @@ export interface Patient {
   /** Age string at enrollment, e.g. "41 yrs" — used to build the PUID */
   ageAtEnrollment?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface DoctorProfile {

@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 import React, {
   createContext,
   useCallback,
@@ -11,13 +12,36 @@ import { Image } from "react-native";
 import { useAuth } from "@clerk/expo";
 import { DoctorProfile, DrugFormulation, Patient, Prescription, PrescriptionConfig } from "@/types";
 import { DEFAULT_PRESCRIPTION_CONFIG, normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
+import { getSync, saveSync } from "@workspace/api-client-react";
+import type { SyncResponse } from "@workspace/api-client-react";
 
 const PRESCRIPTIONS_KEY = "@optiscript_prescriptions";
 const PATIENTS_KEY = "@optiscript_patients";
 const DOCTOR_KEY = "@optiscript_doctor";
 const PRESCRIPTION_CONFIG_KEY = "@optiscript_prescription_config";
+const SYNC_META_KEY = "@optiscript_sync_meta";
 const DEFAULT_RX_PAD_IMAGE = require("../assets/images/nabil-rx-pad-a4.jpg");
 const STORAGE_KEYS = [PRESCRIPTIONS_KEY, PATIENTS_KEY, DOCTOR_KEY, PRESCRIPTION_CONFIG_KEY];
+
+interface SyncMeta {
+  revision: number;
+  pending: boolean;
+}
+
+interface SyncSnapshot {
+  patients: Patient[];
+  prescriptions: Prescription[];
+  doctor: DoctorProfile;
+  prescriptionConfig: PrescriptionConfig;
+}
+
+type SyncStatus = "idle" | "syncing" | "synced" | "offline" | "error";
+
+function isSyncConflict(error: unknown): error is { status: number; data: unknown } {
+  return Boolean(error && typeof error === "object"
+    && (error as { status?: unknown }).status === 409
+    && "data" in error);
+}
 
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -41,6 +65,7 @@ function normalizePatient(raw: unknown): Patient | null {
     gender: raw.gender === "Male" || raw.gender === "Female" || raw.gender === "Other" ? raw.gender : "",
     ageAtEnrollment: text(raw.ageAtEnrollment) || undefined,
     createdAt: text(raw.createdAt) || new Date().toISOString(),
+    updatedAt: text(raw.updatedAt) || text(raw.createdAt) || new Date().toISOString(),
   };
 }
 
@@ -168,6 +193,7 @@ function normalizePrescription(raw: unknown, patientsById: Map<string, Patient>)
     followUp: text(raw.followUp),
     followUpBn: text(raw.followUpBn),
     createdAt,
+    updatedAt: text(raw.updatedAt) || createdAt,
   };
 }
 
@@ -187,6 +213,68 @@ function withBundledRxPadTemplate(config: PrescriptionConfig): PrescriptionConfi
     rxPadOverlays: seeded,
     activeRxPadOverlayId: activeId,
     rxPadOverlay: seeded.find((overlay) => overlay.id === activeId) || seeded[0],
+  };
+}
+
+function normalizeSyncMeta(raw: unknown): SyncMeta {
+  if (!isRecord(raw)) return { revision: 0, pending: false };
+  return {
+    revision: typeof raw.revision === "number" && Number.isInteger(raw.revision) && raw.revision >= 0 ? raw.revision : 0,
+    pending: raw.pending === true,
+  };
+}
+
+function normalizeSyncSnapshot(raw: unknown): SyncSnapshot {
+  const source = isRecord(raw) ? raw : {};
+  const rawPatients = Array.isArray(source.patients) ? source.patients : [];
+  const patients = rawPatients.map(normalizePatient).filter(Boolean) as Patient[];
+  const patientsById = new Map(patients.map((patient) => [patient.id, patient]));
+  const prescriptions = (Array.isArray(source.prescriptions) ? source.prescriptions : [])
+    .map((item) => normalizePrescription(item, patientsById))
+    .filter(Boolean) as Prescription[];
+  const rawDoctor = isRecord(source.doctor) ? source.doctor : {};
+  const doctor = { ...DEFAULT_DOCTOR, ...Object.fromEntries(Object.keys(DEFAULT_DOCTOR).map((key) => [key, text(rawDoctor[key])])) };
+  const prescriptionConfig = withBundledRxPadTemplate(normalizePrescriptionConfig(source.prescriptionConfig));
+  return {
+    patients: patients.map((patient) => patient.puid ? patient : { ...patient, puid: generateLegacyPuid() }),
+    prescriptions,
+    doctor,
+    prescriptionConfig,
+  };
+}
+
+function snapshotHasData(snapshot: SyncSnapshot): boolean {
+  return snapshot.patients.length > 0
+    || snapshot.prescriptions.length > 0
+    || Object.values(snapshot.doctor).some(Boolean)
+    || JSON.stringify(snapshot.prescriptionConfig) !== JSON.stringify(DEFAULT_PRESCRIPTION_CONFIG);
+}
+
+function recordTimestamp(record: { updatedAt?: string; createdAt: string }): number {
+  const value = Date.parse(record.updatedAt || record.createdAt);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function mergeSnapshots(local: SyncSnapshot, remote: SyncSnapshot): SyncSnapshot {
+  const mergeRecords = <T extends { id: string; createdAt: string; updatedAt?: string }>(
+    localRecords: T[],
+    remoteRecords: T[],
+  ): T[] => {
+    const merged = new Map(remoteRecords.map((record) => [record.id, record]));
+    localRecords.forEach((localRecord) => {
+      const remoteRecord = merged.get(localRecord.id);
+      if (!remoteRecord || recordTimestamp(localRecord) >= recordTimestamp(remoteRecord)) {
+        merged.set(localRecord.id, localRecord);
+      }
+    });
+    return Array.from(merged.values()).sort((a, b) => recordTimestamp(b) - recordTimestamp(a));
+  };
+
+  return {
+    patients: mergeRecords(local.patients, remote.patients),
+    prescriptions: mergeRecords(local.prescriptions, remote.prescriptions),
+    doctor: local.doctor,
+    prescriptionConfig: local.prescriptionConfig,
   };
 }
 
@@ -231,6 +319,7 @@ interface DataContextValue {
   doctor: DoctorProfile;
   prescriptionConfig: PrescriptionConfig;
   loading: boolean;
+  syncStatus: SyncStatus;
   addPrescription: (rx: Omit<Prescription, "id" | "createdAt">) => Promise<Prescription>;
   updatePrescription: (id: string, rx: Omit<Prescription, "id" | "createdAt">) => Promise<void>;
   deletePrescription: (id: string) => Promise<void>;
@@ -269,11 +358,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [doctor, setDoctor] = useState<DoctorProfile>(DEFAULT_DOCTOR);
   const [prescriptionConfig, setPrescriptionConfig] = useState<PrescriptionConfig>(DEFAULT_PRESCRIPTION_CONFIG);
   const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const prescriptionsRef = useRef<Prescription[]>([]);
   const patientsRef = useRef<Patient[]>([]);
   const doctorRef = useRef<DoctorProfile>(DEFAULT_DOCTOR);
   const configRef = useRef<PrescriptionConfig>(DEFAULT_PRESCRIPTION_CONFIG);
   const writeQueueRef = useRef(Promise.resolve());
+  const syncQueueRef = useRef(Promise.resolve());
+  const syncMetaRef = useRef<SyncMeta>({ revision: 0, pending: false });
+  const serverRevisionRef = useRef(0);
+  const latestSnapshotRef = useRef<SyncSnapshot | null>(null);
 
   const scopedKey = useCallback((key: string) => `${key}:${userId}`, [userId]);
   const persist = useCallback((key: string, value: unknown) => {
@@ -282,6 +376,100 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return writeQueueRef.current;
   }, [scopedKey]);
 
+  const snapshotFromRefs = useCallback((): SyncSnapshot => ({
+    patients: patientsRef.current,
+    prescriptions: prescriptionsRef.current,
+    doctor: doctorRef.current,
+    prescriptionConfig: configRef.current,
+  }), []);
+
+  const persistSnapshot = useCallback(async (snapshot: SyncSnapshot) => {
+    latestSnapshotRef.current = snapshot;
+    await Promise.all([
+      persist(PATIENTS_KEY, snapshot.patients),
+      persist(PRESCRIPTIONS_KEY, snapshot.prescriptions),
+      persist(DOCTOR_KEY, snapshot.doctor),
+      persist(PRESCRIPTION_CONFIG_KEY, snapshot.prescriptionConfig),
+    ]);
+  }, [persist]);
+
+  const applySnapshot = useCallback(async (snapshot: SyncSnapshot) => {
+    prescriptionsRef.current = snapshot.prescriptions;
+    patientsRef.current = snapshot.patients;
+    doctorRef.current = snapshot.doctor;
+    configRef.current = snapshot.prescriptionConfig;
+    setPrescriptions(snapshot.prescriptions);
+    setPatients(snapshot.patients);
+    setDoctor(snapshot.doctor);
+    setPrescriptionConfig(snapshot.prescriptionConfig);
+    await persistSnapshot(snapshot);
+  }, [persistSnapshot]);
+
+  const scheduleSync = useCallback((snapshot: SyncSnapshot) => {
+    latestSnapshotRef.current = snapshot;
+    syncMetaRef.current = { ...syncMetaRef.current, pending: true };
+    void persist(SYNC_META_KEY, syncMetaRef.current);
+    syncQueueRef.current = syncQueueRef.current.catch(() => undefined).then(async () => {
+      const currentSnapshot = latestSnapshotRef.current || snapshot;
+      setSyncStatus("syncing");
+      try {
+        const save = async (candidate: SyncSnapshot, baseRevision: number) => saveSync({
+          snapshot: candidate as unknown as Record<string, unknown>,
+          baseRevision,
+        });
+        let result: SyncResponse;
+        try {
+          result = await save(currentSnapshot, serverRevisionRef.current);
+        } catch (error) {
+          if (!isSyncConflict(error) || !error.data || typeof error.data !== "object") {
+            throw error;
+          }
+          const conflict = error.data as SyncResponse;
+          const remoteSnapshot = normalizeSyncSnapshot(conflict.snapshot);
+          const merged = mergeSnapshots(currentSnapshot, remoteSnapshot);
+          await applySnapshot(merged);
+          serverRevisionRef.current = conflict.revision;
+          result = await save(merged, conflict.revision);
+        }
+        serverRevisionRef.current = result.revision;
+        syncMetaRef.current = { revision: result.revision, pending: false };
+        await persist(SYNC_META_KEY, syncMetaRef.current);
+        setSyncStatus("synced");
+      } catch (error) {
+        console.warn("OptiScript cloud sync deferred:", error);
+        setSyncStatus("offline");
+      }
+    });
+  }, [applySnapshot, persist]);
+
+  const pullFromCloud = useCallback(async (localSnapshot: SyncSnapshot) => {
+    setSyncStatus("syncing");
+    try {
+      const remote = await getSync();
+      serverRevisionRef.current = remote.revision;
+      if (!remote.snapshot) {
+        if (snapshotHasData(localSnapshot)) scheduleSync(localSnapshot);
+        else setSyncStatus("synced");
+        return;
+      }
+
+      const remoteSnapshot = normalizeSyncSnapshot(remote.snapshot);
+      if (syncMetaRef.current.pending) {
+        const merged = mergeSnapshots(localSnapshot, remoteSnapshot);
+        await applySnapshot(merged);
+        scheduleSync(merged);
+      } else {
+        await applySnapshot(remoteSnapshot);
+        syncMetaRef.current = { revision: remote.revision, pending: false };
+        await persist(SYNC_META_KEY, syncMetaRef.current);
+        setSyncStatus("synced");
+      }
+    } catch (error) {
+      console.warn("OptiScript cloud data unavailable; using local cache:", error);
+      setSyncStatus("offline");
+    }
+  }, [applySnapshot, persist, scheduleSync]);
+
   useEffect(() => {
     if (!authLoaded) return;
     if (!isSignedIn || !userId) {
@@ -289,10 +477,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       patientsRef.current = [];
       doctorRef.current = DEFAULT_DOCTOR;
       configRef.current = DEFAULT_PRESCRIPTION_CONFIG;
+      latestSnapshotRef.current = null;
+      syncMetaRef.current = { revision: 0, pending: false };
+      serverRevisionRef.current = 0;
       setPrescriptions([]);
       setPatients([]);
       setDoctor(DEFAULT_DOCTOR);
       setPrescriptionConfig(DEFAULT_PRESCRIPTION_CONFIG);
+      setSyncStatus("idle");
       setLoading(false);
       return;
     }
@@ -335,6 +527,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setPatients(patientsWithPuid);
         setDoctor(savedDoctor);
         setPrescriptionConfig(normalizedConfig);
+        const localSnapshot: SyncSnapshot = {
+          patients: patientsWithPuid,
+          prescriptions: normalizedWithPuid,
+          doctor: savedDoctor,
+          prescriptionConfig: normalizedConfig,
+        };
+        latestSnapshotRef.current = localSnapshot;
+        const rawSyncMeta = await AsyncStorage.getItem(scopedKey(SYNC_META_KEY));
+        syncMetaRef.current = normalizeSyncMeta(rawSyncMeta ? JSON.parse(rawSyncMeta) : undefined);
         const usedLegacy = STORAGE_KEYS.some((key) => !rawByKey.get(scopedKey(key)) && legacyByKey.get(key));
         if (usedLegacy || !rawByKey.get(scopedKey(PATIENTS_KEY)) || !rawByKey.get(scopedKey(PRESCRIPTIONS_KEY)) || !rawByKey.get(scopedKey(PRESCRIPTION_CONFIG_KEY))) {
           await Promise.all([
@@ -345,15 +546,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ]);
           if (usedLegacy) await AsyncStorage.multiRemove(STORAGE_KEYS);
         }
+        if (!cancelled) await pullFromCloud(localSnapshot);
       } catch (error) {
         console.warn("OptiScript data load recovered with empty data:", error);
+        if (!cancelled) setSyncStatus("offline");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [authLoaded, isSignedIn, persist, scopedKey, userId]);
+  }, [authLoaded, isSignedIn, persist, pullFromCloud, scopedKey, userId]);
+
+  useEffect(() => {
+    if (!isSignedIn || !userId || loading) return;
+    const refresh = () => {
+      if (AppState.currentState === "active" && latestSnapshotRef.current) {
+        void pullFromCloud(latestSnapshotRef.current);
+      }
+    };
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    const interval = setInterval(refresh, 30000);
+    return () => {
+      subscription.remove();
+      clearInterval(interval);
+    };
+  }, [isSignedIn, loading, pullFromCloud, userId]);
 
   const addPrescription = useCallback(
     async (rx: Omit<Prescription, "id" | "createdAt">): Promise<Prescription> => {
@@ -361,14 +581,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         ...rx,
         id: generateId(),
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       const updated = [newRx, ...prescriptionsRef.current];
       prescriptionsRef.current = updated;
       setPrescriptions(updated);
       await persist(PRESCRIPTIONS_KEY, updated);
+      scheduleSync({ patients: patientsRef.current, prescriptions: updated, doctor: doctorRef.current, prescriptionConfig: configRef.current });
       return newRx;
     },
-    [persist]
+    [persist, scheduleSync]
   );
 
   const deletePrescription = useCallback(async (id: string) => {
@@ -376,18 +598,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     prescriptionsRef.current = updated;
     setPrescriptions(updated);
     await persist(PRESCRIPTIONS_KEY, updated);
-  }, [persist]);
+    scheduleSync(snapshotFromRefs());
+  }, [persist, scheduleSync, snapshotFromRefs]);
 
   const updatePrescription = useCallback(async (id: string, rx: Omit<Prescription, "id" | "createdAt">) => {
     const current = prescriptionsRef.current.find((item) => item.id === id);
     if (!current) throw new Error("Prescription not found");
     const updated = prescriptionsRef.current.map((item) => item.id === id
-      ? { ...current, ...rx, id, createdAt: current.createdAt }
+      ? { ...current, ...rx, id, createdAt: current.createdAt, updatedAt: new Date().toISOString() }
       : item);
     prescriptionsRef.current = updated;
     setPrescriptions(updated);
     await persist(PRESCRIPTIONS_KEY, updated);
-  }, [persist]);
+    scheduleSync(snapshotFromRefs());
+  }, [persist, scheduleSync, snapshotFromRefs]);
 
   const addPatient = useCallback(
     async (p: Omit<Patient, "id" | "createdAt">): Promise<Patient> => {
@@ -407,24 +631,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         id: generateId(),
         puid,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       const updated = [newP, ...patientsRef.current];
       patientsRef.current = updated;
       setPatients(updated);
       await persist(PATIENTS_KEY, updated);
+      scheduleSync({ patients: updated, prescriptions: prescriptionsRef.current, doctor: doctorRef.current, prescriptionConfig: configRef.current });
       return newP;
     },
-    [persist]
+    [persist, scheduleSync]
   );
 
   const updatePatient = useCallback(async (id: string, p: Partial<Patient>) => {
     const updated = patientsRef.current.map((pt) => (pt.id === id
-      ? { ...pt, name: p.name ?? pt.name, dob: p.dob ?? pt.dob, phone: p.phone ?? pt.phone, email: p.email ?? pt.email, gender: p.gender ?? pt.gender, ageAtEnrollment: p.ageAtEnrollment ?? pt.ageAtEnrollment }
+      ? { ...pt, name: p.name ?? pt.name, dob: p.dob ?? pt.dob, phone: p.phone ?? pt.phone, email: p.email ?? pt.email, gender: p.gender ?? pt.gender, ageAtEnrollment: p.ageAtEnrollment ?? pt.ageAtEnrollment, updatedAt: new Date().toISOString() }
       : pt));
     patientsRef.current = updated;
     setPatients(updated);
     await persist(PATIENTS_KEY, updated);
-  }, [persist]);
+    scheduleSync(snapshotFromRefs());
+  }, [persist, scheduleSync, snapshotFromRefs]);
 
   const deletePatient = useCallback(async (id: string) => {
     const updatedPatients = patientsRef.current.filter((pt) => pt.id !== id);
@@ -434,21 +661,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setPatients(updatedPatients);
     setPrescriptions(updatedPrescriptions);
     await Promise.all([persist(PATIENTS_KEY, updatedPatients), persist(PRESCRIPTIONS_KEY, updatedPrescriptions)]);
-  }, [persist]);
+    scheduleSync({ patients: updatedPatients, prescriptions: updatedPrescriptions, doctor: doctorRef.current, prescriptionConfig: configRef.current });
+  }, [persist, scheduleSync]);
 
   const updateDoctor = useCallback(async (d: Partial<DoctorProfile>) => {
     const updated = { ...doctorRef.current, ...d };
     doctorRef.current = updated;
     setDoctor(updated);
     await persist(DOCTOR_KEY, updated);
-  }, [persist]);
+    scheduleSync({ patients: patientsRef.current, prescriptions: prescriptionsRef.current, doctor: updated, prescriptionConfig: configRef.current });
+  }, [persist, scheduleSync]);
 
   const updatePrescriptionConfig = useCallback(async (config: PrescriptionConfig) => {
     const normalized = withBundledRxPadTemplate(normalizePrescriptionConfig(config));
     configRef.current = normalized;
     setPrescriptionConfig(normalized);
     await persist(PRESCRIPTION_CONFIG_KEY, normalized);
-  }, [persist]);
+    scheduleSync({ patients: patientsRef.current, prescriptions: prescriptionsRef.current, doctor: doctorRef.current, prescriptionConfig: normalized });
+  }, [persist, scheduleSync]);
 
   const getPrescriptionsForPatient = useCallback(
     (patientId: string) => prescriptions.filter((r) => r.patientId === patientId),
@@ -468,6 +698,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         doctor,
         prescriptionConfig,
         loading,
+        syncStatus,
         addPrescription,
         updatePrescription,
         deletePrescription,
