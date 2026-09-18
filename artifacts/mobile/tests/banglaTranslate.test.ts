@@ -25,6 +25,21 @@ test("translates frequency and drop-count phrases", () => {
   assert.equal(translateToBangla("at bedtime"), "রাতে ঘুমানোর আগে");
 });
 
+test("translates dosing abbreviations regardless of letter case", () => {
+  assert.equal(
+    translateToBangla("qid / Tds / tid / Bd / bID / od / Hs / sos / PrN"),
+    "দিনে ৪ বার / দিনে ৩ বার / দিনে ৩ বার / দিনে ২ বার / দিনে ২ বার / দিনে ১ বার / রাতে ঘুমানোর আগে / প্রয়োজন হলে / প্রয়োজন হলে",
+  );
+});
+
+test("preserves medication names and unrelated text around dosing abbreviations", () => {
+  assert.equal(
+    translateToBangla("Timolol qid; Latanoprost Od. Keep refrigerated."),
+    "Timolol দিনে ৪ বার; Latanoprost দিনে ১ বার. Keep refrigerated.",
+  );
+  assert.equal(translateToBangla("Timolol and Latanoprost"), "Timolol and Latanoprost");
+});
+
 test("translates callback-based duration replacements", () => {
   assert.equal(translateToBangla("for 14 days"), "১৪ দিন পর্যন্ত");
   assert.equal(translateToBangla("for 3 weeks"), "৩ সপ্তাহ পর্যন্ত");
