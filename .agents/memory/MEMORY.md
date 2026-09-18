@@ -4,3 +4,4 @@
 - [Prescription command deck](prescription-command-deck.md) — the prescriptions home uses a dark clinical hero, date-rail cards, compact filters, and inline Rx review.
 - [Rx pad overlay geometry](rx-pad-overlay-geometry.md) — keep editor, persistence, and PDF placement in one millimeter coordinate system; the scan must fill the configured paper bounds.
 - [Rx pad PDF validation](rx-pad-pdf-validation.md) — validate rendered output and physical page boxes, not PDF-internal image object types that vary by renderer.
+- [Data context testing](data-context-testing.md) — mounted provider tests need mocked native boundaries and delayed cross-account responses.
