@@ -16,6 +16,7 @@ import { getSync, saveSync } from "@workspace/api-client-react";
 import type { SyncResponse } from "@workspace/api-client-react";
 import {
   deserializePrescriptionConfig,
+  isCurrentDataSession,
   PRESCRIPTION_CONFIG_STORAGE_KEY,
   serializePrescriptionConfig,
 } from "@/utils/prescriptionConfigStorage";
@@ -373,6 +374,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const syncMetaRef = useRef<SyncMeta>({ revision: 0, pending: false });
   const serverRevisionRef = useRef(0);
   const latestSnapshotRef = useRef<SyncSnapshot | null>(null);
+  const activeUserIdRef = useRef<string | null>(null);
 
   const scopedKey = useCallback((key: string) => `${key}:${userId}`, [userId]);
   const persist = useCallback((key: string, value: unknown) => {
@@ -390,7 +392,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     prescriptionConfig: configRef.current,
   }), []);
 
-  const persistSnapshot = useCallback(async (snapshot: SyncSnapshot) => {
+  const persistSnapshot = useCallback(async (
+    snapshot: SyncSnapshot,
+    expectedUserId: string | null,
+  ): Promise<boolean> => {
+    if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return false;
     latestSnapshotRef.current = snapshot;
     await Promise.all([
       persist(PATIENTS_KEY, snapshot.patients),
@@ -398,9 +404,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       persist(DOCTOR_KEY, snapshot.doctor),
       persist(PRESCRIPTION_CONFIG_KEY, snapshot.prescriptionConfig),
     ]);
+    return isCurrentDataSession(activeUserIdRef.current, expectedUserId);
   }, [persist]);
 
-  const applySnapshot = useCallback(async (snapshot: SyncSnapshot) => {
+  const applySnapshot = useCallback(async (
+    snapshot: SyncSnapshot,
+    expectedUserId: string | null,
+  ): Promise<boolean> => {
+    if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return false;
     prescriptionsRef.current = snapshot.prescriptions;
     patientsRef.current = snapshot.patients;
     doctorRef.current = snapshot.doctor;
@@ -409,14 +420,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setPatients(snapshot.patients);
     setDoctor(snapshot.doctor);
     setPrescriptionConfig(snapshot.prescriptionConfig);
-    await persistSnapshot(snapshot);
+    return persistSnapshot(snapshot, expectedUserId);
   }, [persistSnapshot]);
 
-  const scheduleSync = useCallback((snapshot: SyncSnapshot) => {
+  const scheduleSync = useCallback((snapshot: SyncSnapshot, expectedUserId = activeUserIdRef.current) => {
+    if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
     latestSnapshotRef.current = snapshot;
     syncMetaRef.current = { ...syncMetaRef.current, pending: true };
     void persist(SYNC_META_KEY, syncMetaRef.current);
     syncQueueRef.current = syncQueueRef.current.catch(() => undefined).then(async () => {
+      if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
       const currentSnapshot = latestSnapshotRef.current || snapshot;
       setSyncStatus("syncing");
       try {
@@ -428,50 +441,64 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         try {
           result = await save(currentSnapshot, serverRevisionRef.current);
         } catch (error) {
+          if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
           if (!isSyncConflict(error) || !error.data || typeof error.data !== "object") {
             throw error;
           }
           const conflict = error.data as SyncResponse;
           const remoteSnapshot = normalizeSyncSnapshot(conflict.snapshot);
           const merged = mergeSnapshots(currentSnapshot, remoteSnapshot);
-          await applySnapshot(merged);
+          const applied = await applySnapshot(merged, expectedUserId);
+          if (!applied || !isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
           serverRevisionRef.current = conflict.revision;
           result = await save(merged, conflict.revision);
         }
+        if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
         serverRevisionRef.current = result.revision;
         syncMetaRef.current = { revision: result.revision, pending: false };
         await persist(SYNC_META_KEY, syncMetaRef.current);
+        if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
         setSyncStatus("synced");
       } catch (error) {
+        if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
         console.warn("OptiScript cloud sync deferred:", error);
         setSyncStatus("offline");
       }
     });
   }, [applySnapshot, persist]);
 
-  const pullFromCloud = useCallback(async (localSnapshot: SyncSnapshot) => {
+  const pullFromCloud = useCallback(async (localSnapshot: SyncSnapshot, expectedUserId = activeUserIdRef.current) => {
+    if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
     setSyncStatus("syncing");
     try {
       const remote = await getSync();
+      if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
       serverRevisionRef.current = remote.revision;
       if (!remote.snapshot) {
-        if (snapshotHasData(localSnapshot)) scheduleSync(localSnapshot);
-        else setSyncStatus("synced");
+        if (snapshotHasData(localSnapshot)) {
+          scheduleSync(localSnapshot, expectedUserId);
+        } else if (isCurrentDataSession(activeUserIdRef.current, expectedUserId)) {
+          setSyncStatus("synced");
+        }
         return;
       }
 
       const remoteSnapshot = normalizeSyncSnapshot(remote.snapshot);
       if (syncMetaRef.current.pending) {
         const merged = mergeSnapshots(localSnapshot, remoteSnapshot);
-        await applySnapshot(merged);
-        scheduleSync(merged);
+        const applied = await applySnapshot(merged, expectedUserId);
+        if (!applied || !isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
+        scheduleSync(merged, expectedUserId);
       } else {
-        await applySnapshot(remoteSnapshot);
+        const applied = await applySnapshot(remoteSnapshot, expectedUserId);
+        if (!applied || !isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
         syncMetaRef.current = { revision: remote.revision, pending: false };
         await persist(SYNC_META_KEY, syncMetaRef.current);
+        if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
         setSyncStatus("synced");
       }
     } catch (error) {
+      if (!isCurrentDataSession(activeUserIdRef.current, expectedUserId)) return;
       console.warn("OptiScript cloud data unavailable; using local cache:", error);
       setSyncStatus("offline");
     }
@@ -479,7 +506,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authLoaded) return;
-    if (!isSignedIn || !userId) {
+    const nextUserId = isSignedIn && userId ? userId : null;
+    const userChanged = activeUserIdRef.current !== nextUserId;
+    activeUserIdRef.current = nextUserId;
+    if (userChanged || !nextUserId) {
       prescriptionsRef.current = [];
       patientsRef.current = [];
       doctorRef.current = DEFAULT_DOCTOR;
@@ -492,6 +522,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setDoctor(DEFAULT_DOCTOR);
       setPrescriptionConfig(DEFAULT_PRESCRIPTION_CONFIG);
       setSyncStatus("idle");
+    }
+    if (!isSignedIn || !userId) {
       setLoading(false);
       return;
     }
@@ -500,7 +532,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       try {
         const scoped = await AsyncStorage.multiGet(STORAGE_KEYS.map((key) => scopedKey(key)));
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         const legacy = await AsyncStorage.multiGet(STORAGE_KEYS);
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         const rawByKey = new Map(scoped);
         const legacyByKey = new Map(legacy);
         const read = (key: string) => rawByKey.get(scopedKey(key)) || legacyByKey.get(key) || null;
@@ -524,7 +558,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...prescription,
           patientPuid: prescription.patientPuid || patientsById.get(prescription.patientId)?.puid,
         }));
-        if (cancelled) return;
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         prescriptionsRef.current = normalizedWithPuid;
         patientsRef.current = patientsWithPuid;
         doctorRef.current = savedDoctor;
@@ -541,6 +575,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         };
         latestSnapshotRef.current = localSnapshot;
         const rawSyncMeta = await AsyncStorage.getItem(scopedKey(SYNC_META_KEY));
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         syncMetaRef.current = normalizeSyncMeta(rawSyncMeta ? JSON.parse(rawSyncMeta) : undefined);
         const usedLegacy = STORAGE_KEYS.some((key) => !rawByKey.get(scopedKey(key)) && legacyByKey.get(key));
         if (usedLegacy || !rawByKey.get(scopedKey(PATIENTS_KEY)) || !rawByKey.get(scopedKey(PRESCRIPTIONS_KEY)) || !rawByKey.get(scopedKey(PRESCRIPTION_CONFIG_KEY))) {
@@ -550,14 +585,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             persist(DOCTOR_KEY, savedDoctor),
             persist(PRESCRIPTION_CONFIG_KEY, normalizedConfig),
           ]);
-          if (usedLegacy) await AsyncStorage.multiRemove(STORAGE_KEYS);
+          if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
+          if (usedLegacy) {
+            await AsyncStorage.multiRemove(STORAGE_KEYS);
+            if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
+          }
         }
-        if (!cancelled) await pullFromCloud(localSnapshot);
+        if (!cancelled && isCurrentDataSession(activeUserIdRef.current, userId)) {
+          await pullFromCloud(localSnapshot, userId);
+        }
       } catch (error) {
+        if (cancelled || !isCurrentDataSession(activeUserIdRef.current, userId)) return;
         console.warn("OptiScript data load recovered with empty data:", error);
-        if (!cancelled) setSyncStatus("offline");
+        setSyncStatus("offline");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && isCurrentDataSession(activeUserIdRef.current, userId)) setLoading(false);
       }
     };
     load();
@@ -568,7 +610,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!isSignedIn || !userId || loading) return;
     const refresh = () => {
       if (AppState.currentState === "active" && latestSnapshotRef.current) {
-        void pullFromCloud(latestSnapshotRef.current);
+        void pullFromCloud(latestSnapshotRef.current, userId);
       }
     };
     const subscription = AppState.addEventListener("change", (state) => {

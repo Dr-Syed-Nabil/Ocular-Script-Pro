@@ -7,4 +7,4 @@ OptiScript keeps an account-scoped cloud snapshot with a device-local cache for 
 
 **Why:** Clinicians need the same patients, prescriptions, profile, and Rx pad configuration on multiple signed-in devices while preserving the existing shared-device privacy boundary.
 
-**How to apply:** Scope local cache and server rows by authenticated Clerk user, clear provider state when there is no active user, serialize local writes, upload changes through the authenticated sync API, and reconcile newer remote snapshots when the app resumes.
+**How to apply:** Scope local cache and server rows by authenticated Clerk user; clear provider state on every identity change, not only sign-out; and reject delayed loads or sync responses unless they still match the active user. Serialize local writes, upload changes through the authenticated sync API, and reconcile newer remote snapshots when the app resumes.

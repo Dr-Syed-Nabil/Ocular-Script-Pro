@@ -22,7 +22,9 @@ import {
 import type { Prescription } from "@/types";
 import {
   deserializePrescriptionConfig,
+  getPrescriptionConfigForUser,
   getPrescriptionConfigStorageKey,
+  isCurrentDataSession,
   serializePrescriptionConfig,
 } from "@/utils/prescriptionConfigStorage";
 
@@ -220,6 +222,63 @@ test("reopens an uploaded scan from prescription configuration storage without c
   assert.match(html, /@page \{ size: 210mm 297mm; margin: 0; \}/);
   assert.match(html, /background-position: 35% 70%; background-size: cover;/);
   assert.match(html, /left:42mm;top:47mm;width:112mm;height:10mm/);
+});
+
+test("loads each clinician's own active Rx pad and clears it at sign-out", () => {
+  const storage = new Map<string, string>();
+  const clinicianOne = normalizePrescriptionConfig({
+    activeRxPadOverlayId: "clinician-one-pad",
+    rxPadOverlays: [{
+      id: "clinician-one-pad",
+      name: "Clinician one",
+      paperWidthMm: 210,
+      paperHeightMm: 297,
+      fields: [],
+    }],
+  });
+  const clinicianTwo = normalizePrescriptionConfig({
+    activeRxPadOverlayId: "clinician-two-pad",
+    rxPadOverlays: [{
+      id: "clinician-two-pad",
+      name: "Clinician two",
+      paperWidthMm: 140,
+      paperHeightMm: 216,
+      fields: [],
+    }],
+  });
+  storage.set(getPrescriptionConfigStorageKey("clinician-1"), serializePrescriptionConfig(clinicianOne));
+  storage.set(getPrescriptionConfigStorageKey("clinician-2"), serializePrescriptionConfig(clinicianTwo));
+
+  assert.equal(getPrescriptionConfigForUser(storage, "clinician-1").activeRxPadOverlayId, "clinician-one-pad");
+  assert.equal(
+    getPrescriptionConfigForUser(storage, null).activeRxPadOverlayId,
+    normalizePrescriptionConfig(undefined).activeRxPadOverlayId,
+    "sign-out must expose only the default in-memory selection",
+  );
+  assert.equal(getPrescriptionConfigForUser(storage, "clinician-2").activeRxPadOverlayId, "clinician-two-pad");
+  assert.equal(getPrescriptionConfigForUser(storage, "clinician-1").activeRxPadOverlayId, "clinician-one-pad");
+});
+
+test("rejects delayed Rx pad loads after the clinician session changes", () => {
+  assert.equal(isCurrentDataSession("clinician-1", "clinician-1"), true);
+  assert.equal(isCurrentDataSession(null, "clinician-1"), false);
+  assert.equal(isCurrentDataSession("clinician-2", "clinician-1"), false);
+});
+
+test("DataProvider preserves the original clinician through nested cloud sync work", () => {
+  const source = readFileSync(join(process.cwd(), "context/DataContext.tsx"), "utf8");
+
+  assert.match(source, /applySnapshot\(merged, expectedUserId\)/);
+  assert.match(source, /scheduleSync\(merged, expectedUserId\)/);
+  assert.match(source, /scheduleSync\(localSnapshot, expectedUserId\)/);
+  assert.match(
+    source,
+    /const applied = await applySnapshot\(merged, expectedUserId\);\s*if \(!applied \|\| !isCurrentDataSession\(activeUserIdRef\.current, expectedUserId\)\) return;/,
+  );
+  assert.match(
+    source,
+    /result = await save\(merged, conflict\.revision\);\s*}\s*if \(!isCurrentDataSession\(activeUserIdRef\.current, expectedUserId\)\) return;/,
+  );
 });
 
 test("keeps saved individual content geometry and label preferences after reopening", () => {
