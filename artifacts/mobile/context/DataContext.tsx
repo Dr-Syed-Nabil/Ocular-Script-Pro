@@ -595,9 +595,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updatePrescriptionConfig = useCallback(async (config: PrescriptionConfig) => {
     const normalized = withBundledRxPadTemplate(normalizePrescriptionConfig(config));
+    // Commit local state only after AsyncStorage accepts the complete
+    // configuration. This keeps the editor's save failure recoverable and
+    // avoids showing an unsaved scan as if it were already offline-safe.
+    await persist(PRESCRIPTION_CONFIG_KEY, normalized);
     configRef.current = normalized;
     setPrescriptionConfig(normalized);
-    await persist(PRESCRIPTION_CONFIG_KEY, normalized);
     scheduleSync({ patients: patientsRef.current, prescriptions: prescriptionsRef.current, doctor: doctorRef.current, prescriptionConfig: normalized });
   }, [persist, scheduleSync]);
 

@@ -35,6 +35,7 @@ import {
   normalizeRxPadPaperSize,
 } from "@/utils/rxPadOverlay";
 import { getRxPadOverlayReadiness } from "@/utils/generatePrescriptionHTML";
+import { PrescriptionConfigStorageError } from "@/utils/prescriptionConfigStorage";
 
 const PREVIEW_WIDTH = 340;
 const IMAGE_FIT_OPTIONS: Array<{ value: RxPadImageFit; label: string; description: string }> = [
@@ -402,6 +403,7 @@ export default function RxPadSettingsScreen() {
   const [selectedId, setSelectedId] = useState("patient");
   const [selectedContentId, setSelectedContentId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     const incoming = configuredOverlays(prescriptionConfig);
@@ -545,6 +547,7 @@ export default function RxPadSettingsScreen() {
   };
 
   const chooseImage = async () => {
+    setSaveError(null);
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
@@ -566,6 +569,7 @@ export default function RxPadSettingsScreen() {
 
   const save = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const committed = templates.map((template) => template.id === selectedTemplateId ? draft : template);
       const active = committed.find((template) => template.id === selectedTemplateId) || committed[0];
@@ -576,6 +580,12 @@ export default function RxPadSettingsScreen() {
         rxPadOverlay: active,
       });
       router.back();
+    } catch (error) {
+      const message = error instanceof PrescriptionConfigStorageError
+        ? error.message
+        : "Your Rx Pad changes were not saved. Check available device storage, then try Save again. The editor is still open.";
+      setSaveError(message);
+      Alert.alert("Rx Pad not saved", message, [{ text: "OK" }]);
     } finally {
       setSaving(false);
     }
@@ -602,6 +612,15 @@ export default function RxPadSettingsScreen() {
           <Text style={styles.saveText}>{saving ? "Saving…" : "Save"}</Text>
         </TouchableOpacity>
       </View>
+        {saveError ? (
+          <View
+            accessibilityRole="alert"
+            style={[styles.saveError, { backgroundColor: colors.destructive + "14", borderColor: colors.destructive }]}
+          >
+            <Feather name="alert-circle" size={16} color={colors.destructive} />
+            <Text style={[styles.saveErrorText, { color: colors.destructive }]}>{saveError}</Text>
+          </View>
+        ) : null}
 
       <KeyboardAwareScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]}
@@ -1081,6 +1100,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   saveButton: { borderRadius: 18, paddingHorizontal: 15, paddingVertical: 9 },
   saveText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  saveError: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderWidth: 1, borderRadius: 12, marginHorizontal: 16, marginBottom: 10, padding: 11 },
+  saveErrorText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium" },
   scroll: { paddingHorizontal: 16, paddingTop: 4 },
   infoBox: { borderRadius: 12, padding: 12, marginBottom: 14 },
   infoText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },

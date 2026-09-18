@@ -24,9 +24,12 @@ import {
 import type { Prescription } from "@/types";
 import {
   deserializePrescriptionConfig,
+  getPrescriptionConfigByteLength,
   getPrescriptionConfigForUser,
   getPrescriptionConfigStorageKey,
   isCurrentDataSession,
+  MAX_PRESCRIPTION_CONFIG_BYTES,
+  PrescriptionConfigStorageError,
   serializePrescriptionConfig,
 } from "@/utils/prescriptionConfigStorage";
 
@@ -224,6 +227,56 @@ test("reopens an uploaded scan from prescription configuration storage without c
   assert.match(html, /@page \{ size: 210mm 297mm; margin: 0; \}/);
   assert.match(html, /background-position: 35% 70%; background-size: cover;/);
   assert.match(html, /left:42mm;top:47mm;width:112mm;height:10mm/);
+});
+
+test("rejects a scan that would exceed the safe offline configuration size", () => {
+  const oversizedConfig = normalizePrescriptionConfig({
+    version: 8,
+    activeRxPadOverlayId: "oversized-pad",
+    rxPadOverlays: [{
+      id: "oversized-pad",
+      name: "Oversized pad",
+      imageUri: `data:image/jpeg;base64,${"A".repeat(MAX_PRESCRIPTION_CONFIG_BYTES)}`,
+      imageWidthPx: 2480,
+      imageHeightPx: 3508,
+      paperWidthMm: 210,
+      paperHeightMm: 297,
+      fields: [],
+    }],
+  });
+
+  assert.ok(getPrescriptionConfigByteLength(oversizedConfig) > MAX_PRESCRIPTION_CONFIG_BYTES);
+  assert.throws(
+    () => serializePrescriptionConfig(oversizedConfig),
+    (error: unknown) => {
+      assert.ok(error instanceof PrescriptionConfigStorageError);
+      assert.match(error.message, /too large to save/i);
+      assert.match(error.message, /smaller or more compressed image/i);
+      return true;
+    },
+  );
+});
+
+test("keeps a valid compressed scan eligible for offline storage", () => {
+  const config = normalizePrescriptionConfig({
+    version: 8,
+    activeRxPadOverlayId: "offline-pad",
+    rxPadOverlays: [{
+      id: "offline-pad",
+      name: "Offline pad",
+      imageUri: "data:image/jpeg;base64,c2Nhbm5lZC1yeC1wYWQ=",
+      imageWidthPx: 1080,
+      imageHeightPx: 1505,
+      paperWidthMm: 210,
+      paperHeightMm: 297,
+      fields: [],
+    }],
+  });
+
+  const serialized = serializePrescriptionConfig(config);
+  assert.ok(serialized.length > 0);
+  assert.ok(getPrescriptionConfigByteLength(config) < MAX_PRESCRIPTION_CONFIG_BYTES);
+  assert.equal(deserializePrescriptionConfig(serialized).rxPadOverlays?.[0].imageUri, config.rxPadOverlays?.[0].imageUri);
 });
 
 test("keeps saved scan alignment consistent across reopening, PDF HTML, and preview geometry", () => {
