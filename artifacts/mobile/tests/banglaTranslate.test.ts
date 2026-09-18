@@ -44,3 +44,29 @@ test("converts every remaining English digit and identifies Bangla text", () => 
   assert.equal(isAlreadyBangla("চোখে দিন"), true);
   assert.equal(isAlreadyBangla("Apply twice daily"), false);
 });
+
+test("translates multiline advice without changing medication names or line breaks", () => {
+  const advice = [
+    "Timolol: one drop in both eyes.",
+    "Latanoprost: at night; continue medication.",
+    "Moxifloxacin: use as directed!",
+  ].join("\n");
+
+  assert.equal(
+    translateToBangla(advice),
+    [
+      "Timolol: ১ ফোটা উভয় চোখে.",
+      "Latanoprost: রাতে; ওষুধ চালিয়ে যান.",
+      "Moxifloxacin: নির্দেশমতো ব্যবহার করুন!",
+    ].join("\n"),
+  );
+});
+
+test("translates English phrases around existing Bangla text without altering it", () => {
+  const advice = "চোখ ঘষবেন না। Wash your hands, then apply ointment (Chloramphenicol).";
+
+  assert.equal(
+    translateToBangla(advice),
+    "চোখ ঘষবেন না। হাত ধুয়ে নিন, then মলম লাগান (Chloramphenicol).",
+  );
+});
