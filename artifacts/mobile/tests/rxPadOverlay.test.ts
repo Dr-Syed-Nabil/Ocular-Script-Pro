@@ -224,6 +224,57 @@ test("reopens an uploaded scan from prescription configuration storage without c
   assert.match(html, /left:42mm;top:47mm;width:112mm;height:10mm/);
 });
 
+test("keeps saved scan alignment consistent across reopening, PDF HTML, and preview geometry", () => {
+  const reopened = normalizePrescriptionConfig({
+    version: 8,
+    activeRxPadOverlayId: "aligned-pad",
+    rxPadOverlays: [
+      {
+        id: "aligned-pad",
+        name: "Aligned pad",
+        imageUri: "data:image/jpeg;base64,c2Nhbg==",
+        imageWidthPx: 400,
+        imageHeightPx: 400,
+        imageFit: "contain",
+        imagePositionX: 25,
+        imagePositionY: 75,
+        paperWidthMm: 200,
+        paperHeightMm: 300,
+        fields: [],
+      },
+      {
+        id: "clamped-pad",
+        name: "Clamped pad",
+        imagePositionX: -15,
+        imagePositionY: 140,
+        paperWidthMm: 200,
+        paperHeightMm: 300,
+        fields: [],
+      },
+    ],
+  });
+  const overlay = reopened.rxPadOverlays?.find((candidate) => candidate.id === "aligned-pad");
+  const clampedOverlay = reopened.rxPadOverlays?.find((candidate) => candidate.id === "clamped-pad");
+
+  assert.ok(overlay);
+  assert.equal(overlay.imagePositionX, 25);
+  assert.equal(overlay.imagePositionY, 75);
+  assert.equal(clampedOverlay?.imagePositionX, 0);
+  assert.equal(clampedOverlay?.imagePositionY, 100);
+
+  const html = generateRxPadOverlayHTML(emptyPrescription, overlay);
+  assert.match(html, /background-position: 25% 75%; background-size: contain;/);
+
+  assert.deepEqual(
+    getRxPadImageRenderGeometry(200, 300, 400, 400, "contain", overlay.imagePositionX, overlay.imagePositionY),
+    { left: 0, top: 75, width: 200, height: 200 },
+  );
+  assert.deepEqual(
+    getRxPadImageRenderGeometry(200, 300, 400, 400, "crop", overlay.imagePositionX, overlay.imagePositionY),
+    { left: -25, top: 0, width: 300, height: 300 },
+  );
+});
+
 test("loads each clinician's own active Rx pad and clears it at sign-out", () => {
   const storage = new Map<string, string>();
   const clinicianOne = normalizePrescriptionConfig({
