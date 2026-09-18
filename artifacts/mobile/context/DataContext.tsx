@@ -18,6 +18,7 @@ import {
   deserializePrescriptionConfig,
   isCurrentDataSession,
   PRESCRIPTION_CONFIG_STORAGE_KEY,
+  prescriptionConfigNeedsPersistence,
   serializePrescriptionConfig,
 } from "@/utils/prescriptionConfigStorage";
 import { normalizePrescription } from "@/utils/prescriptionNormalization";
@@ -545,7 +546,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const missingScopedData = !rawByKey.get(scopedKey(PATIENTS_KEY))
           || !rawByKey.get(scopedKey(PRESCRIPTIONS_KEY))
           || !rawByKey.get(scopedKey(PRESCRIPTION_CONFIG_KEY));
-        if (usedLegacy || (!legacyAvailable && missingScopedData)) {
+        const repairedPrescriptionConfig = prescriptionConfigNeedsPersistence(
+          read(PRESCRIPTION_CONFIG_KEY),
+          normalizedConfig,
+        );
+        if (usedLegacy || (!legacyAvailable && missingScopedData) || repairedPrescriptionConfig) {
           await Promise.all([
             persist(PATIENTS_KEY, patientsWithPuid),
             persist(PRESCRIPTIONS_KEY, normalizedWithPuid),

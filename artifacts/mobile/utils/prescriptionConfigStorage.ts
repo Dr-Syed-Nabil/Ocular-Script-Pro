@@ -55,6 +55,19 @@ export function deserializePrescriptionConfig(value: string | null | undefined):
   return normalizePrescriptionConfig(JSON.parse(value));
 }
 
+export function prescriptionConfigNeedsPersistence(
+  serialized: string | null | undefined,
+  normalizedConfig: PrescriptionConfig,
+): boolean {
+  if (!serialized) return false;
+  try {
+    const stored = JSON.parse(serialized) as { activeRxPadOverlayId?: unknown };
+    return stored?.activeRxPadOverlayId !== normalizedConfig.activeRxPadOverlayId;
+  } catch {
+    return false;
+  }
+}
+
 export function getPrescriptionConfigByteLength(config: PrescriptionConfig): number {
   return utf8ByteLength(JSON.stringify(config));
 }

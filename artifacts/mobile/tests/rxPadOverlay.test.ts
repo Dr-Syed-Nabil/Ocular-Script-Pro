@@ -29,6 +29,7 @@ import {
   getPrescriptionConfigStorageKey,
   isCurrentDataSession,
   MAX_PRESCRIPTION_CONFIG_BYTES,
+  prescriptionConfigNeedsPersistence,
   PrescriptionConfigStorageError,
   serializePrescriptionConfig,
 } from "@/utils/prescriptionConfigStorage";
@@ -516,6 +517,47 @@ test("falls back to the first overlay when the saved active ID is missing, blank
       );
     });
   }
+});
+
+test("persists a recovered active overlay selection for the next load", () => {
+  const storage = new Map<string, string>();
+  const storageKey = getPrescriptionConfigStorageKey("clinician-1");
+  const firstOverlay = {
+    id: "first-pad",
+    name: "First pad",
+    paperWidthMm: 123.4,
+    paperHeightMm: 265.6,
+    fields: [{ ...field, x: 11.5, y: 22.25, width: 47.75, height: 8.5 }],
+  };
+  const secondOverlay = {
+    id: "second-pad",
+    name: "Second pad",
+    paperWidthMm: 140,
+    paperHeightMm: 216,
+    fields: [],
+  };
+
+  storage.set(storageKey, JSON.stringify({
+    version: 8,
+    activeRxPadOverlayId: "deleted-pad",
+    rxPadOverlays: [firstOverlay, secondOverlay],
+    rxPadOverlay: secondOverlay,
+  }));
+
+  const recovered = deserializePrescriptionConfig(storage.get(storageKey));
+  assert.equal(prescriptionConfigNeedsPersistence(storage.get(storageKey), recovered), true);
+  assert.equal(recovered.activeRxPadOverlayId, firstOverlay.id);
+  assert.equal(recovered.rxPadOverlay?.paperWidthMm, firstOverlay.paperWidthMm);
+  assert.equal(recovered.rxPadOverlay?.paperHeightMm, firstOverlay.paperHeightMm);
+
+  storage.set(storageKey, serializePrescriptionConfig(recovered));
+
+  const reopened = getPrescriptionConfigForUser(storage, "clinician-1");
+  assert.equal(reopened.activeRxPadOverlayId, firstOverlay.id);
+  assert.equal(reopened.rxPadOverlay?.id, firstOverlay.id);
+  assert.equal(reopened.rxPadOverlay?.paperWidthMm, firstOverlay.paperWidthMm);
+  assert.equal(reopened.rxPadOverlay?.paperHeightMm, firstOverlay.paperHeightMm);
+  assert.equal(prescriptionConfigNeedsPersistence(storage.get(storageKey), reopened), false);
 });
 
 test("migrates a legacy single overlay into the saved overlay collection", () => {
