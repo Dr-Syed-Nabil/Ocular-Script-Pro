@@ -4,6 +4,8 @@ import test from "node:test";
 
 import React from "react";
 
+import { normalizePrescriptionConfig } from "../constants/prescriptionConfig";
+
 type AuthState = {
   isLoaded: boolean;
   isSignedIn: boolean;
@@ -20,7 +22,20 @@ type DataView = {
   prescriptions: Array<{ id: string; patientId: string }>;
   doctor: { nameEn: string };
   prescriptionConfig: { activeRxPadOverlayId?: string };
+  loading: boolean;
   syncStatus: string;
+};
+
+type MockStorage = {
+  multiGet: (keys: string[]) => Promise<Array<[string, string | null]>>;
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  multiRemove: (keys: string[]) => Promise<void>;
+};
+
+type MockApi = {
+  getSync: () => Promise<unknown>;
+  saveSync: () => Promise<unknown>;
 };
 
 const localRequire = createRequire(__filename);
@@ -33,6 +48,22 @@ const rendererModule = localRequire("react-test-renderer") as {
 };
 const { act, create } = rendererModule;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+let activeAuth: AuthState = { isLoaded: true, isSignedIn: false, userId: null };
+let activeStorage: MockStorage;
+let activeApi: MockApi;
+
+const asyncStorageProxy = {
+  multiGet: (keys: string[]) => activeStorage.multiGet(keys),
+  getItem: (key: string) => activeStorage.getItem(key),
+  setItem: (key: string, value: string) => activeStorage.setItem(key, value),
+  multiRemove: (keys: string[]) => activeStorage.multiRemove(keys),
+};
+
+const apiClientProxy = {
+  getSync: () => activeApi.getSync(),
+  saveSync: () => activeApi.saveSync(),
+};
 
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
@@ -129,13 +160,14 @@ test("mounted DataProvider isolates every clinician record across account switch
     revision: number;
     snapshot: typeof clinicianOne.snapshot;
   }>();
-  let auth: AuthState = { isLoaded: true, isSignedIn: true, userId: "clinician-1" };
+  activeAuth = { isLoaded: true, isSignedIn: true, userId: "clinician-1" };
   let cloudCallCount = 0;
   let latest: DataView = {
     patients: [],
     prescriptions: [],
     doctor: { nameEn: "" },
     prescriptionConfig: {},
+    loading: true,
     syncStatus: "idle",
   };
 
@@ -160,6 +192,8 @@ test("mounted DataProvider isolates every clinician record across account switch
     },
     saveSync: async () => ({ revision: 1 }),
   };
+  activeStorage = asyncStorage;
+  activeApi = apiClient;
   const nativeModules = {
     AppState: {
       currentState: "active",
@@ -178,12 +212,12 @@ test("mounted DataProvider isolates every clinician record across account switch
   };
   const originalLoad = moduleApi._load;
   moduleApi._load = function load(request, parent, isMain) {
-    if (request === "@clerk/expo") return { useAuth: () => auth };
+    if (request === "@clerk/expo") return { useAuth: () => activeAuth };
     if (request === "@react-native-async-storage/async-storage") {
-      return { __esModule: true, default: asyncStorage };
+      return { __esModule: true, default: asyncStorageProxy };
     }
     if (request === "react-native") return nativeModules;
-    if (request === "@workspace/api-client-react") return apiClient;
+    if (request === "@workspace/api-client-react") return apiClientProxy;
     if (request.endsWith(".jpg")) return 0;
     return originalLoad.call(this, request, parent, isMain);
   };
@@ -198,6 +232,7 @@ test("mounted DataProvider isolates every clinician record across account switch
         prescriptions: data.prescriptions.map(({ id, patientId }) => ({ id, patientId })),
         doctor: { nameEn: data.doctor.nameEn },
         prescriptionConfig: { activeRxPadOverlayId: data.prescriptionConfig.activeRxPadOverlayId },
+        loading: data.loading,
         syncStatus: data.syncStatus,
       };
       return null;
@@ -218,7 +253,7 @@ test("mounted DataProvider isolates every clinician record across account switch
     assert.equal(latest.doctor.nameEn, clinicianOne.doctor.nameEn);
     assert.equal(latest.prescriptionConfig.activeRxPadOverlayId, clinicianOne.prescriptionConfig.activeRxPadOverlayId);
 
-    auth = { isLoaded: true, isSignedIn: true, userId: "clinician-2" };
+    activeAuth = { isLoaded: true, isSignedIn: true, userId: "clinician-2" };
     await act(async () => {
       renderer!.update(
         React.createElement(DataProvider, null, React.createElement(Probe)),
@@ -259,6 +294,144 @@ test("mounted DataProvider isolates every clinician record across account switch
     assert.equal(latest.doctor.nameEn, clinicianTwo.doctor.nameEn);
     assert.equal(latest.prescriptionConfig.activeRxPadOverlayId, clinicianTwo.prescriptionConfig.activeRxPadOverlayId);
 
+  } finally {
+    renderer?.unmount();
+    moduleApi._load = originalLoad;
+  }
+});
+
+
+test("mounted DataProvider repairs an invalid persisted Rx Pad selection without changing the first overlay", async () => {
+  const userId = "clinician-recovery";
+  const storage = new Map<string, string>();
+  const savedConfig = normalizePrescriptionConfig({
+    version: 8,
+    activeRxPadOverlayId: "first-pad",
+    rxPadOverlays: [
+      {
+        id: "first-pad",
+        name: "First custom pad",
+        imageUri: "data:image/jpeg;base64,Zmlyc3Q=",
+        imageWidthPx: 2480,
+        imageHeightPx: 3508,
+        paperWidthMm: 123.4,
+        paperHeightMm: 265.6,
+        fields: [
+          {
+            id: "patient",
+            label: "Patient particulars",
+            enabled: true,
+            x: 11.5,
+            y: 22.25,
+            width: 47.75,
+            height: 8.5,
+            fontSize: 9,
+          },
+        ],
+      },
+      {
+        id: "second-pad",
+        name: "Second custom pad",
+        imageUri: "data:image/jpeg;base64,c2Vjb25k",
+        imageWidthPx: 1200,
+        imageHeightPx: 1800,
+        paperWidthMm: 210,
+        paperHeightMm: 297,
+        fields: [],
+      },
+    ],
+  });
+  const firstOverlay = savedConfig.rxPadOverlays?.[0];
+  assert.ok(firstOverlay);
+  const expectedFirstOverlay = JSON.parse(JSON.stringify(firstOverlay));
+  const corruptedConfig = {
+    ...savedConfig,
+    activeRxPadOverlayId: "missing-pad",
+  };
+  const configKey = `@optiscript_prescription_config:${userId}`;
+  storage.set(configKey, JSON.stringify(corruptedConfig));
+
+  activeAuth = { isLoaded: true, isSignedIn: true, userId };
+  activeStorage = {
+    multiGet: async (keys) => keys.map((key) => [key, storage.get(key) ?? null]),
+    getItem: async (key) => storage.get(key) ?? null,
+    setItem: async (key, value) => {
+      storage.set(key, value);
+    },
+    multiRemove: async (keys) => {
+      keys.forEach((key) => storage.delete(key));
+    },
+  };
+  activeApi = {
+    getSync: async () => {
+      throw new Error("offline");
+    },
+    saveSync: async () => ({ revision: 1 }),
+  };
+
+  let latest: Pick<DataView, "loading" | "prescriptionConfig"> = {
+    loading: true,
+    prescriptionConfig: {},
+  };
+
+  const nativeModules = {
+    AppState: {
+      currentState: "active",
+      addEventListener: () => ({ remove: () => undefined }),
+    },
+    Image: {
+      resolveAssetSource: () => ({ uri: "file://bundled-rx-pad.jpg" }),
+    },
+  };
+  const moduleApi = localRequire("node:module") as {
+    _load: (
+      request: string,
+      parent: NodeModule | null,
+      isMain: boolean,
+    ) => unknown;
+  };
+  const originalLoad = moduleApi._load;
+  moduleApi._load = function load(request, parent, isMain) {
+    if (request === "@clerk/expo") return { useAuth: () => activeAuth };
+    if (request === "@react-native-async-storage/async-storage") {
+      return { __esModule: true, default: asyncStorageProxy };
+    }
+    if (request === "react-native") return nativeModules;
+    if (request === "@workspace/api-client-react") return apiClientProxy;
+    if (request.endsWith(".jpg")) return 0;
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    const { DataProvider, useData } = await import("../context/DataContext");
+    function Probe() {
+      const data = useData();
+      latest = {
+        loading: data.loading,
+        prescriptionConfig: {
+          activeRxPadOverlayId: data.prescriptionConfig.activeRxPadOverlayId,
+        },
+      };
+      return null;
+    }
+
+    await act(async () => {
+      renderer = create(
+        React.createElement(DataProvider, null, React.createElement(Probe)),
+      );
+    });
+    await act(async () => {
+      await waitFor(() => latest.loading === false, "Rx Pad recovery load");
+    });
+
+    const rewritten = JSON.parse(storage.get(configKey) as string) as typeof corruptedConfig;
+    const rewrittenFirstOverlay = rewritten.rxPadOverlays?.[0];
+    assert.ok(rewrittenFirstOverlay);
+    assert.equal(latest.prescriptionConfig.activeRxPadOverlayId, "first-pad");
+    assert.equal(rewritten.activeRxPadOverlayId, "first-pad");
+    assert.equal(rewrittenFirstOverlay.paperWidthMm, expectedFirstOverlay.paperWidthMm);
+    assert.equal(rewrittenFirstOverlay.paperHeightMm, expectedFirstOverlay.paperHeightMm);
+    assert.deepEqual(rewrittenFirstOverlay.fields, expectedFirstOverlay.fields);
   } finally {
     renderer?.unmount();
     moduleApi._load = originalLoad;
