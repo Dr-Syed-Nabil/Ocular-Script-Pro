@@ -20,6 +20,11 @@ import {
   hasRxPadOverlayContent,
 } from "@/utils/generatePrescriptionHTML";
 import type { Prescription } from "@/types";
+import {
+  deserializePrescriptionConfig,
+  getPrescriptionConfigStorageKey,
+  serializePrescriptionConfig,
+} from "@/utils/prescriptionConfigStorage";
 
 const paper = { width: 100, height: 80 };
 const field = {
@@ -169,6 +174,52 @@ test("preserves valid custom paper dimensions when saved configuration is reopen
       contentSelection: undefined,
     },
   );
+});
+
+test("reopens an uploaded scan from prescription configuration storage without changing its PDF placement", () => {
+  const userId = "clinician-1";
+  const storage = new Map<string, string>();
+  const savedConfig = normalizePrescriptionConfig({
+    version: 8,
+    activeRxPadOverlayId: "uploaded-pad",
+    rxPadOverlays: [{
+      id: "uploaded-pad",
+      name: "Uploaded pad",
+      imageUri: "data:image/jpeg;base64,c2Nhbm5lZC1yeC1wYWQ=",
+      imageWidthPx: 2480,
+      imageHeightPx: 3508,
+      imageFit: "crop",
+      imagePositionX: 35,
+      imagePositionY: 70,
+      paperWidthMm: 210,
+      paperHeightMm: 297,
+      fields: [{ ...field, id: "diagnosis", x: 42, y: 47, width: 112, height: 10 }],
+    }],
+  });
+  const storageKey = getPrescriptionConfigStorageKey(userId);
+
+  storage.set(storageKey, serializePrescriptionConfig(savedConfig));
+
+  const reopened = deserializePrescriptionConfig(storage.get(storageKey));
+  const overlay = reopened.rxPadOverlays?.find((candidate) => candidate.id === reopened.activeRxPadOverlayId);
+  assert.ok(overlay);
+  assert.equal(storageKey, "@optiscript_prescription_config:clinician-1");
+  assert.equal(overlay.imageUri, "data:image/jpeg;base64,c2Nhbm5lZC1yeC1wYWQ=");
+  assert.equal(overlay.imageWidthPx, 2480);
+  assert.equal(overlay.imageHeightPx, 3508);
+  assert.equal(overlay.imageFit, "crop");
+  assert.equal(overlay.imagePositionX, 35);
+  assert.equal(overlay.imagePositionY, 70);
+  assert.equal(overlay.paperWidthMm, 210);
+  assert.equal(overlay.paperHeightMm, 297);
+
+  const html = generateRxPadOverlayHTML(
+    { ...emptyPrescription, diagnosis: "Cataract" },
+    overlay,
+  );
+  assert.match(html, /@page \{ size: 210mm 297mm; margin: 0; \}/);
+  assert.match(html, /background-position: 35% 70%; background-size: cover;/);
+  assert.match(html, /left:42mm;top:47mm;width:112mm;height:10mm/);
 });
 
 test("keeps saved individual content geometry and label preferences after reopening", () => {

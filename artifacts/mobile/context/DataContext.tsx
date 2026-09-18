@@ -14,11 +14,16 @@ import { DoctorProfile, DrugFormulation, Patient, Prescription, PrescriptionConf
 import { DEFAULT_PRESCRIPTION_CONFIG, normalizePrescriptionConfig } from "@/constants/prescriptionConfig";
 import { getSync, saveSync } from "@workspace/api-client-react";
 import type { SyncResponse } from "@workspace/api-client-react";
+import {
+  deserializePrescriptionConfig,
+  PRESCRIPTION_CONFIG_STORAGE_KEY,
+  serializePrescriptionConfig,
+} from "@/utils/prescriptionConfigStorage";
 
 const PRESCRIPTIONS_KEY = "@optiscript_prescriptions";
 const PATIENTS_KEY = "@optiscript_patients";
 const DOCTOR_KEY = "@optiscript_doctor";
-const PRESCRIPTION_CONFIG_KEY = "@optiscript_prescription_config";
+const PRESCRIPTION_CONFIG_KEY = PRESCRIPTION_CONFIG_STORAGE_KEY;
 const SYNC_META_KEY = "@optiscript_sync_meta";
 const DEFAULT_RX_PAD_IMAGE = require("../assets/images/nabil-rx-pad-a4.jpg");
 const STORAGE_KEYS = [PRESCRIPTIONS_KEY, PATIENTS_KEY, DOCTOR_KEY, PRESCRIPTION_CONFIG_KEY];
@@ -371,7 +376,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const scopedKey = useCallback((key: string) => `${key}:${userId}`, [userId]);
   const persist = useCallback((key: string, value: unknown) => {
-    const serialized = JSON.stringify(value);
+    const serialized = key === PRESCRIPTION_CONFIG_KEY
+      ? serializePrescriptionConfig(value as PrescriptionConfig)
+      : JSON.stringify(value);
     writeQueueRef.current = writeQueueRef.current.catch(() => undefined).then(() => AsyncStorage.setItem(scopedKey(key), serialized));
     return writeQueueRef.current;
   }, [scopedKey]);
@@ -512,8 +519,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const rawDoctor = read(DOCTOR_KEY) ? JSON.parse(read(DOCTOR_KEY) as string) : {};
         const savedDoctor = isRecord(rawDoctor) ? { ...DEFAULT_DOCTOR, ...Object.fromEntries(Object.keys(DEFAULT_DOCTOR).map((key) => [key, text(rawDoctor[key])])) } : DEFAULT_DOCTOR;
         const configRaw = read(PRESCRIPTION_CONFIG_KEY);
-        const savedConfig = configRaw ? JSON.parse(configRaw) : undefined;
-        const normalizedConfig = withBundledRxPadTemplate(normalizePrescriptionConfig(savedConfig));
+        const normalizedConfig = withBundledRxPadTemplate(deserializePrescriptionConfig(configRaw));
         const normalizedWithPuid = normalizedRx.map((prescription) => ({
           ...prescription,
           patientPuid: prescription.patientPuid || patientsById.get(prescription.patientId)?.puid,
