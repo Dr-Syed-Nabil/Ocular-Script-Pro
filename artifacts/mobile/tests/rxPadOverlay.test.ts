@@ -348,6 +348,54 @@ test("keeps the selected duplicate overlay active while assigning unique IDs", (
   assert.equal(reopened.rxPadOverlay?.paperWidthMm, 120);
 });
 
+test("falls back to the first overlay when the saved active ID is missing, blank, or malformed", async (t) => {
+  const overlays = [
+    {
+      id: "first-pad",
+      name: "First pad",
+      paperWidthMm: 123.4,
+      paperHeightMm: 265.6,
+      fields: [{ ...field, x: 11.5, y: 22.25, width: 47.75, height: 8.5 }],
+    },
+    { id: "second-pad", name: "Second pad", paperWidthMm: 140, paperHeightMm: 216, fields: [] },
+  ];
+  const invalidActiveIds = [
+    { name: "missing", value: undefined },
+    { name: "deleted overlay", value: "deleted-pad" },
+    { name: "blank", value: "   " },
+    { name: "malformed", value: { id: "second-pad" } },
+  ] as const;
+
+  for (const invalidActiveId of invalidActiveIds) {
+    await t.test(invalidActiveId.name, () => {
+      const reopened = normalizePrescriptionConfig({
+        version: 8,
+        ...(invalidActiveId.value === undefined ? {} : { activeRxPadOverlayId: invalidActiveId.value }),
+        rxPadOverlays: overlays,
+        rxPadOverlay: overlays[1],
+      });
+
+      assert.equal(reopened.activeRxPadOverlayId, "first-pad");
+      assert.equal(reopened.rxPadOverlay?.id, "first-pad");
+      assert.equal(reopened.rxPadOverlay, reopened.rxPadOverlays?.[0]);
+      assert.equal(reopened.rxPadOverlay?.paperWidthMm, 123.4);
+      assert.equal(reopened.rxPadOverlay?.paperHeightMm, 265.6);
+      assert.deepEqual(
+        reopened.rxPadOverlay?.fields.find((candidate) => candidate.id === "patient"),
+        {
+          ...field,
+          x: 11.5,
+          y: 22.25,
+          width: 47.75,
+          height: 8.5,
+          printMode: "all",
+          contentSelection: undefined,
+        },
+      );
+    });
+  }
+});
+
 test("migrates a legacy single overlay into the saved overlay collection", () => {
   const reopened = normalizePrescriptionConfig({
     version: 7,
